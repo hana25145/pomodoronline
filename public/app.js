@@ -84,6 +84,7 @@ const elements = {
   modeLabel: document.querySelector("#modeLabel"),
   timeReadout: document.querySelector("#timeReadout"),
   subline: document.querySelector("#subline"),
+  nextMode: document.querySelector("#nextMode"),
   startPauseButton: document.querySelector("#startPauseButton"),
   resetButton: document.querySelector("#resetButton"),
   primaryActions: document.querySelector("#primaryActions"),
@@ -395,6 +396,14 @@ function formatTime(milliseconds) {
   return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
 
+function getNextMode(mode, focusSessionsDone) {
+  if (mode === "focus") {
+    return (focusSessionsDone + 1) % 4 === 0 ? "long" : "short";
+  }
+
+  return "focus";
+}
+
 function getRemaining() {
   if (state.session === "multi") {
     return currentRemaining(state.timer, Date.now() + state.serverOffset);
@@ -559,6 +568,7 @@ function updateControls() {
 function applyTimerToUI() {
   elements.modeLabel.textContent = MODE_COPY[state.timer.mode].label;
   elements.timeReadout.textContent = formatTime(getRemaining());
+  elements.nextMode.textContent = `Next: ${MODE_COPY[getNextMode(state.timer.mode, state.timer.focusSessionsDone)].label}`;
   elements.startPauseButton.textContent = state.timer.status === "running" ? "Pause" : "Start";
   elements.startPauseButton.className = `action-button ${state.timer.status === "running" ? "pause" : "start"}`;
 
@@ -720,7 +730,10 @@ function renderMusic() {
 
 function applySnapshot(payload) {
   state.serverOffset = payload.serverNow - Date.now();
-  state.timer = payload.timer;
+  state.timer = {
+    ...payload.timer,
+    startedAt: payload.timer?.status === "running" ? payload.serverNow : null
+  };
   state.participants = payload.participants || [];
   state.history = payload.history || [];
   state.chat = payload.chat || [];

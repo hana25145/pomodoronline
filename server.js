@@ -280,6 +280,7 @@ function advanceTrack(room, by = "Music") {
 
 function snapshot(room, client = null) {
   const now = Date.now();
+  const remainingMs = currentRemaining(room.timer, now);
   return {
     type: "snapshot",
     room: room.id,
@@ -293,7 +294,8 @@ function snapshot(room, client = null) {
     serverNow: now,
     timer: {
       ...room.timer,
-      remainingMs: currentRemaining(room.timer, now)
+      remainingMs,
+      startedAt: room.timer.status === "running" ? now : null
     },
     participants: [...room.participants.values()].sort((a, b) => a.joinedAt - b.joinedAt),
     history: room.history,

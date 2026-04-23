@@ -393,6 +393,15 @@ input[readonly] {
   font-weight: 520;
 }
 
+.next-mode {
+  margin: -2px 0 0;
+  color: var(--muted);
+  font-size: 0.84rem;
+  font-weight: 640;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
 .primary-actions {
   justify-content: center;
   gap: 10px;

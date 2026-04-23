@@ -24,7 +24,7 @@
 
 html,
 body {
-  min-height: 100%;
+  height: 100%;
 }
 
 body {
@@ -36,6 +36,7 @@ body {
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
+  overflow: hidden;
 }
 
 button,
@@ -75,6 +76,7 @@ h2 {
 .entry-shell,
 .app-shell {
   min-height: 100vh;
+  min-height: 100dvh;
 }
 
 .entry-shell {
@@ -226,8 +228,11 @@ input[readonly] {
 
 .app-shell {
   display: grid;
-  grid-template-rows: auto 1fr;
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 100vh;
+  height: 100dvh;
   padding: 20px;
+  overflow: hidden;
 }
 
 .topbar,
@@ -257,11 +262,13 @@ input[readonly] {
 
 .workspace-shell {
   min-height: 0;
+  height: 100%;
   display: grid;
   grid-template-columns: minmax(260px, 320px) minmax(0, 1fr) minmax(260px, 320px);
   gap: clamp(16px, 2vw, 28px);
   align-items: stretch;
   padding-top: 18px;
+  overflow: hidden;
 }
 
 .connection-pill {
@@ -303,16 +310,20 @@ input[readonly] {
 
 .timer-stage {
   position: relative;
-  min-height: calc(100vh - 108px);
+  min-height: 0;
+  height: 100%;
   display: grid;
   place-items: center;
+  overflow: hidden;
 }
 
 .side-panel {
-  min-height: calc(100vh - 108px);
+  min-height: 0;
+  height: 100%;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
   gap: 14px;
+  overflow: hidden;
 }
 
 .music-panel {
@@ -338,6 +349,10 @@ input[readonly] {
 .music-panel .side-section:last-child {
   min-height: 0;
   grid-template-rows: auto minmax(0, 1fr);
+}
+
+.music-panel .side-section {
+  min-height: 0;
 }
 
 #focusCanvas {
@@ -594,6 +609,7 @@ input[readonly] {
 
 .chat-list {
   min-height: 0;
+  height: 100%;
   padding-right: 2px;
   overflow: auto;
 }
@@ -605,7 +621,7 @@ input[readonly] {
 }
 
 .music-results {
-  max-height: 220px;
+  max-height: min(220px, 28vh);
   overflow: auto;
 }
 
@@ -667,8 +683,14 @@ input[readonly] {
 }
 
 @media (max-width: 760px) {
+  body {
+    overflow: auto;
+  }
+
   .app-shell {
+    height: auto;
     padding: 14px;
+    overflow: visible;
   }
 
   .topbar {
@@ -683,6 +705,8 @@ input[readonly] {
   .workspace-shell {
     grid-template-columns: 1fr;
     gap: 18px;
+    height: auto;
+    overflow: visible;
   }
 
   .music-panel {
@@ -714,6 +738,8 @@ input[readonly] {
   .timer-stage,
   .side-panel {
     min-height: auto;
+    height: auto;
+    overflow: visible;
   }
 
   .settings-shell {

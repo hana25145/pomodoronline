@@ -8,7 +8,6 @@ ENV PORT=8080
 COPY package.json ./
 COPY server.js ./
 COPY public ./public
-COPY data ./data
 
 EXPOSE 8080
 

@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pomodoro Room</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="entry-shell" id="entryScreen">
+      <section class="entry-panel" aria-label="Entry">
+        <section class="auth-panel" id="authPanel" aria-label="Authentication">
+          <p class="mode-label">Pomodoro</p>
+          <div class="auth-tabs" role="group" aria-label="Auth mode">
+            <button id="loginTabButton" class="entry-button is-active" type="button">Login</button>
+            <button id="signupTabButton" class="entry-button" type="button">Sign up</button>
+          </div>
+          <form id="authForm" class="auth-form">
+            <div class="duration-field">
+              <label for="authUsernameInput">Username</label>
+              <input id="authUsernameInput" maxlength="20" autocomplete="username" />
+            </div>
+            <div class="duration-field">
+              <label for="authPasswordInput">Password</label>
+              <input id="authPasswordInput" type="password" minlength="4" autocomplete="current-password" />
+            </div>
+            <button id="authSubmitButton" class="create-room-submit" type="submit">Login</button>
+          </form>
+          <p class="dialog-message" id="authMessage"></p>
+        </section>
+
+        <section class="mode-panel" id="modePanel" aria-label="Choose timer mode" hidden>
+          <p class="mode-label" id="accountBadge">Ready</p>
+          <div class="entry-tabs" role="group" aria-label="Timer type">
+            <button id="soloButton" class="entry-button" type="button">SOLO</button>
+            <button id="multiButton" class="entry-button" type="button">MULTI</button>
+          </div>
+          <div class="multi-panel" id="multiPanel" hidden>
+            <button id="createRoomButton" class="create-room-button" type="button">방 만들기</button>
+          </div>
+          <button id="entryLogoutButton" class="entry-ghost-button" type="button">Logout</button>
+        </section>
+      </section>
+    </main>
+
+    <dialog class="create-dialog" id="createRoomDialog" aria-labelledby="createRoomTitle">
+      <div class="settings-shell">
+        <div class="settings-head">
+          <div>
+            <p class="section-kicker">Multi</p>
+            <h1 id="createRoomTitle">Create Room</h1>
+          </div>
+          <button id="closeCreateRoomButton" class="close-button" type="button" aria-label="Close create room">Close</button>
+        </div>
+
+        <form class="create-room-form" id="createRoomForm">
+          <section class="settings-section" aria-label="Create room options">
+            <div class="duration-field">
+              <label for="createRoomInput">Room</label>
+              <input id="createRoomInput" maxlength="36" autocomplete="off" />
+            </div>
+            <div class="duration-field">
+              <label for="createNameInput">Display name</label>
+              <input id="createNameInput" maxlength="24" autocomplete="nickname" />
+            </div>
+          </section>
+
+          <section class="settings-section">
+            <div class="create-duration-grid">
+              <div class="duration-field">
+                <label for="createFocusMinutes">Focus</label>
+                <input id="createFocusMinutes" name="focus" type="number" min="1" max="120" value="25" />
+              </div>
+              <div class="duration-field">
+                <label for="createShortMinutes">Short</label>
+                <input id="createShortMinutes" name="short" type="number" min="1" max="120" value="5" />
+              </div>
+              <div class="duration-field">
+                <label for="createLongMinutes">Long</label>
+                <input id="createLongMinutes" name="long" type="number" min="1" max="120" value="15" />
+              </div>
+            </div>
+          </section>
+
+          <button class="create-room-submit" type="submit">Enter Room</button>
+        </form>
+      </div>
+    </dialog>
+
+    <main class="app-shell" id="timerApp" hidden>
+      <header class="topbar" aria-label="Room status">
+        <div class="topbar-left">
+          <div class="connection-pill" id="connectionStatus">Solo</div>
+          <div class="viewer-pill" id="viewerBadge"></div>
+        </div>
+        <div class="topbar-actions">
+          <button id="settingsButton" class="settings-button" type="button" aria-haspopup="dialog" aria-controls="settingsDialog">Settings</button>
+          <button id="homeButton" class="settings-button" type="button">Home</button>
+        </div>
+      </header>
+
+      <section class="workspace-shell">
+        <aside class="side-panel music-panel" aria-label="Music panel">
+          <div class="side-panel-head">
+            <div>
+              <p class="section-kicker">Room</p>
+              <h2>Music</h2>
+            </div>
+            <button id="musicSkipButton" class="icon-button host-only-button" type="button" hidden>Skip</button>
+          </div>
+
+          <section class="side-section" aria-label="Now playing">
+            <p class="section-kicker">Now Playing</p>
+            <h2 id="musicCurrentTitle">Nothing playing</h2>
+            <p class="music-meta" id="musicCurrentMeta">Queue is empty.</p>
+          </section>
+
+          <section class="side-section" aria-label="Search music">
+            <form class="music-search-form" id="musicSearchForm">
+              <input id="musicSearchInput" maxlength="120" autocomplete="off" placeholder="Search YouTube music" />
+              <button class="icon-button" type="submit">Search</button>
+            </form>
+            <p class="dialog-message" id="musicMessage"></p>
+            <div class="music-results" id="musicResults"></div>
+          </section>
+
+          <section class="side-section" aria-label="Queue">
+            <div class="panel-heading">
+              <div>
+                <p class="section-kicker">Queue</p>
+                <h2 id="musicQueueTitle">0 tracks</h2>
+              </div>
+              <span id="musicQuotaBadge">0 / 5</span>
+            </div>
+            <div class="music-queue" id="musicQueue"></div>
+          </section>
+        </aside>
+
+        <section class="timer-stage" aria-label="Pomodoro timer">
+          <canvas id="focusCanvas" aria-hidden="true"></canvas>
+          <div class="timeplate">
+            <p class="mode-label" id="modeLabel">Focus</p>
+            <div class="time-readout" id="timeReadout">25:00</div>
+            <p class="subline" id="subline">Ready.</p>
+            <div class="primary-actions" id="primaryActions">
+              <button id="startPauseButton" class="action-button start" type="button">Start</button>
+              <button id="resetButton" class="action-button ghost" type="button">Reset</button>
+            </div>
+          </div>
+        </section>
+
+        <aside class="side-panel chat-panel" aria-label="Chat panel">
+          <div class="side-panel-head">
+            <div>
+              <p class="section-kicker">Room</p>
+              <h2>Chat</h2>
+            </div>
+          </div>
+          <div class="chat-list" id="chatList"></div>
+          <form class="chat-form" id="chatForm">
+            <input id="chatInput" maxlength="300" autocomplete="off" placeholder="Type a message" />
+            <button class="icon-button" type="submit">Send</button>
+          </form>
+        </aside>
+      </section>
+    </main>
+
+    <dialog class="settings-dialog" id="settingsDialog" aria-labelledby="settingsTitle">
+      <div class="settings-shell">
+        <div class="settings-head">
+          <div>
+            <p class="section-kicker" id="settingsKicker">Timer</p>
+            <h1 id="settingsTitle">Settings</h1>
+          </div>
+          <button id="closeSettingsButton" class="close-button" type="button" aria-label="Close settings">Close</button>
+        </div>
+
+        <div class="settings-content">
+          <section class="settings-section" aria-label="Account">
+            <div class="panel-heading">
+              <div>
+                <p class="section-kicker">Account</p>
+                <h2 id="settingsUsername">username</h2>
+              </div>
+              <button id="settingsLogoutButton" class="icon-button" type="button">Logout</button>
+            </div>
+          </section>
+
+          <section class="settings-section multi-only" aria-label="Room link">
+            <label for="roomInput">Room</label>
+            <div class="room-input-row">
+              <input id="roomInput" maxlength="36" autocomplete="off" readonly />
+              <button id="copyLinkButton" class="icon-button" type="button" aria-label="Copy room link">Link</button>
+            </div>
+          </section>
+
+          <section class="settings-section" aria-label="Profile">
+            <div>
+              <p class="section-kicker">Profile</p>
+              <h2>Display name</h2>
+            </div>
+            <div class="identity-form">
+              <input id="nameInput" maxlength="24" autocomplete="nickname" />
+              <div class="color-row" id="colorRow" aria-label="Color"></div>
+            </div>
+          </section>
+
+          <section class="settings-section host-only" aria-label="Timer mode">
+            <label>Mode</label>
+            <div class="mode-switch" role="group" aria-label="Timer mode">
+              <button type="button" data-mode="focus" class="is-active">Focus</button>
+              <button type="button" data-mode="short">Short</button>
+              <button type="button" data-mode="long">Long</button>
+            </div>
+          </section>
+
+          <form class="rhythm-form settings-section host-only" id="rhythmForm">
+            <div class="duration-field">
+              <label for="focusMinutes">Focus</label>
+              <input id="focusMinutes" name="focus" type="number" min="1" max="120" value="25" />
+            </div>
+            <div class="duration-field">
+              <label for="shortMinutes">Short</label>
+              <input id="shortMinutes" name="short" type="number" min="1" max="120" value="5" />
+            </div>
+            <div class="duration-field">
+              <label for="longMinutes">Long</label>
+              <input id="longMinutes" name="long" type="number" min="1" max="120" value="15" />
+            </div>
+            <button type="submit">Apply</button>
+          </form>
+
+          <section class="settings-section participants-panel multi-only" aria-label="Participants">
+            <div class="panel-heading">
+              <div>
+                <p class="section-kicker">People</p>
+                <h2>Online</h2>
+              </div>
+              <span id="participantCount">0</span>
+            </div>
+            <div class="participant-list" id="participantList"></div>
+          </section>
+
+          <section class="settings-section history-panel multi-only" aria-label="Room log">
+            <div>
+              <p class="section-kicker">Log</p>
+              <h2>Recent</h2>
+            </div>
+            <div class="history-list" id="historyList"></div>
+          </section>
+        </div>
+      </div>
+    </dialog>
+
+    <div id="youtubePlayerHost" aria-hidden="true"></div>
+
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>

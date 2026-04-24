@@ -410,7 +410,11 @@ const elements = {
   musicSearchInput: document.querySelector("#musicSearchInput"),
   musicMessage: document.querySelector("#musicMessage"),
   musicResults: document.querySelector("#musicResults"),
-  musicTimeline: document.querySelector("#musicTimeline"),
+  musicProgress: document.querySelector("#musicProgress"),
+  musicProgressFill: document.querySelector("#musicProgressFill"),
+  musicProgressElapsed: document.querySelector("#musicProgressElapsed"),
+  musicProgressTotal: document.querySelector("#musicProgressTotal"),
+  musicQueueRemaining: document.querySelector("#musicQueueRemaining"),
   musicQueue: document.querySelector("#musicQueue"),
   musicQueueTitle: document.querySelector("#musicQueueTitle"),
   musicQuotaBadge: document.querySelector("#musicQuotaBadge"),
@@ -926,6 +930,7 @@ function clearMusicPlayer() {
   state.playerKey = "";
   musicKeepAliveScheduledAt += 1;
   elements.youtubePlayerHost.innerHTML = "";
+  if (musicProgressRafId) { cancelAnimationFrame(musicProgressRafId); musicProgressRafId = null; }
 }
 
 function syncMusicPlayer(force = false) {
@@ -965,6 +970,29 @@ function syncMusicPlayer(force = false) {
     initialDelay: 520
   });
   return;
+}
+
+function formatMusicSeconds(totalSeconds) {
+  const s = Math.max(0, Math.round(totalSeconds));
+  const m = Math.floor(s / 60);
+  const sec = s % 60;
+  return `${m}:${String(sec).padStart(2, "0")}`;
+}
+
+let musicProgressRafId = null;
+
+function tickMusicProgress() {
+  if (musicProgressRafId) cancelAnimationFrame(musicProgressRafId);
+  const current = state.music.current;
+  if (!current) return;
+  const elapsed = Math.max(0, (Date.now() + state.serverOffset - current.startedAt) / 1000);
+  const duration = current.durationSeconds || 1;
+  const pct = Math.min(1, elapsed / duration);
+  elements.musicProgressFill.style.width = `${pct * 100}%`;
+  elements.musicProgressElapsed.textContent = formatMusicSeconds(elapsed);
+  if (pct < 1) {
+    musicProgressRafId = requestAnimationFrame(tickMusicProgress);
+  }
 }
 
 function canControlTimer() {
@@ -1119,23 +1147,18 @@ function renderMusic() {
     setMusicMessage("Music queue opens in multi rooms.");
   }
 
-  elements.musicTimeline.innerHTML = "";
-  const timelineItems = [];
-  if (current) timelineItems.push({ ...current, isCurrent: true });
-  timelineItems.push(...state.music.queue.slice(0, 3));
-  for (const track of timelineItems) {
-    const li = document.createElement("li");
-    li.className = `timeline-item${track.isCurrent ? " is-current" : ""}`;
-    li.innerHTML = `<span class="timeline-dot"></span><span class="timeline-label"></span>`;
-    li.querySelector(".timeline-label").textContent = track.title;
-    elements.musicTimeline.append(li);
+  elements.musicProgress.hidden = !current;
+  if (current) {
+    elements.musicProgressTotal.textContent = formatMusicSeconds(current.durationSeconds);
+    tickMusicProgress();
   }
-  if (state.music.queue.length > 3) {
-    const more = document.createElement("li");
-    more.className = "timeline-item timeline-more";
-    more.innerHTML = `<span class="timeline-dot"></span><span class="timeline-label"></span>`;
-    more.querySelector(".timeline-label").textContent = `+${state.music.queue.length - 3} more`;
-    elements.musicTimeline.append(more);
+
+  const queueTotalSeconds = state.music.queue.reduce((s, t) => s + (t.durationSeconds || 0), 0);
+  if (current && queueTotalSeconds > 0) {
+    elements.musicQueueRemaining.hidden = false;
+    elements.musicQueueRemaining.textContent = `${state.music.queue.length} more track${state.music.queue.length !== 1 ? "s" : ""} · ${formatMusicSeconds(queueTotalSeconds)} queued`;
+  } else {
+    elements.musicQueueRemaining.hidden = true;
   }
 
   elements.musicResults.innerHTML = "";

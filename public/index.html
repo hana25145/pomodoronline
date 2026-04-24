@@ -118,7 +118,16 @@
           <section class="side-section music-now-section" aria-label="Now playing">
             <h2 id="musicCurrentTitle">Nothing playing</h2>
             <p class="music-meta" id="musicCurrentMeta">Queue is empty.</p>
-            <ul class="music-timeline" id="musicTimeline" role="list"></ul>
+            <div class="music-progress" id="musicProgress" hidden>
+              <div class="music-progress-track">
+                <div class="music-progress-fill" id="musicProgressFill"></div>
+              </div>
+              <div class="music-progress-times">
+                <span id="musicProgressElapsed">0:00</span>
+                <span id="musicProgressTotal"></span>
+              </div>
+            </div>
+            <p class="music-queue-remaining" id="musicQueueRemaining" hidden></p>
           </section>
 
           <section class="side-section music-search-section" aria-label="Search music">

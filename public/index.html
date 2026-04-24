@@ -38,7 +38,7 @@
           <button id="createRoomButton" class="create-room-button" type="button">Create Room</button>
           <div class="multi-divider">or join</div>
           <form class="join-room-form" id="joinRoomForm">
-            <input id="joinRoomInput" aria-label="Room code" placeholder="Room code" maxlength="36" autocomplete="off" />
+            <input id="joinRoomInput" aria-label="Room code" placeholder="Room code" autocomplete="off" />
             <button class="entry-button" type="submit">Join</button>
           </form>
           <p class="dialog-message" id="joinRoomMessage"></p>
@@ -86,6 +86,7 @@
             </div>
           </section>
 
+          <p class="dialog-message" id="createRoomMessage"></p>
           <button class="create-room-submit" type="submit">Enter Room</button>
         </form>
       </div>
@@ -101,12 +102,8 @@
       </header>
 
       <div class="participants-row multi-only" id="participantsBar"></div>
-      <div id="debugHostBar" style="display:none;padding:4px 12px;background:#1a1a2e;border-bottom:1px solid #333;font-size:12px;font-family:monospace;color:#aaa">
-        <button id="debugAssignHostBtn" type="button" style="margin-right:8px;padding:2px 8px;font-size:11px;cursor:pointer">Check Host</button>
-        <span id="debugHostStatus"></span>
-      </div>
 
-      <section class="workspace-shell" id="workspaceShell">
+<section class="workspace-shell" id="workspaceShell">
         <aside class="side-panel music-panel" id="musicPanel" aria-label="Music panel">
           <button class="panel-tab" id="openMusicButton" type="button" aria-label="Open music panel"><span>Music</span></button>
           <div class="side-panel-head">

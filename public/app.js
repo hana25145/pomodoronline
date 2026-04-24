@@ -331,6 +331,7 @@ const elements = {
   createRoomDialog: document.querySelector("#createRoomDialog"),
   closeCreateRoomButton: document.querySelector("#closeCreateRoomButton"),
   createRoomForm: document.querySelector("#createRoomForm"),
+  createRoomMessage: document.querySelector("#createRoomMessage"),
   createRoomInput: document.querySelector("#createRoomInput"),
   createNameInput: document.querySelector("#createNameInput"),
   createFocusMinutes: document.querySelector("#createFocusMinutes"),
@@ -386,10 +387,7 @@ const elements = {
   musicSearchSubmitButton: document.querySelector("#musicSearchForm button[type='submit']"),
   chatSubmitButton: document.querySelector("#chatForm button[type='submit']"),
   youtubePlayerHost: document.querySelector("#youtubePlayerHost"),
-  canvas: document.querySelector("#focusCanvas"),
-  debugHostBar: document.querySelector("#debugHostBar"),
-  debugAssignHostBtn: document.querySelector("#debugAssignHostBtn"),
-  debugHostStatus: document.querySelector("#debugHostStatus")
+  canvas: document.querySelector("#focusCanvas")
 };
 
 const context = elements.canvas.getContext("2d");
@@ -615,6 +613,7 @@ function prepareCreateRoomDialog() {
   elements.createFocusMinutes.value = msToMinutes(sourceDurations.focus);
   elements.createShortMinutes.value = msToMinutes(sourceDurations.short);
   elements.createLongMinutes.value = msToMinutes(sourceDurations.long);
+  elements.createRoomMessage.textContent = "";
 }
 
 function currentRemaining(timer, now = Date.now()) {
@@ -890,7 +889,6 @@ function updateControls() {
   elements.settingsButton.hidden = false;
   elements.primaryActions.hidden = !canControl;
   elements.musicSkipButton.hidden = !(isMulti && state.isHost && state.music.current);
-  elements.debugHostBar.style.display = isMulti ? "block" : "none";
 
   for (const section of elements.multiOnlySections) {
     section.hidden = !isMulti;
@@ -1257,12 +1255,18 @@ function connect() {
     }
   });
 
-  socket.addEventListener("close", () => {
+  socket.addEventListener("close", async () => {
     if (state.socket !== socket || state.session !== "multi") {
       return;
     }
     state.socket = null;
-    state.reconnectTimer = setTimeout(connect, 1200);
+    try {
+      await apiRequest(`/api/rooms/${encodeURIComponent(state.room)}`, { method: "GET" });
+      state.reconnectTimer = setTimeout(connect, 1200);
+    } catch {
+      goHome();
+      elements.joinRoomMessage.textContent = "Room no longer exists.";
+    }
   });
 }
 
@@ -1289,6 +1293,17 @@ function startSolo() {
   renderHistory();
   renderChat();
   renderMusic();
+}
+
+async function joinRoom(room) {
+  try {
+    await apiRequest(`/api/rooms/${encodeURIComponent(room)}`, { method: "GET" });
+  } catch {
+    showModePanel();
+    elements.joinRoomMessage.textContent = "Room not found.";
+    return;
+  }
+  startMulti(room);
 }
 
 function startMulti(room, setup = null) {
@@ -1375,7 +1390,7 @@ async function restoreSession() {
     renderViewerBadge();
 
     if (state.pendingRoomFromUrl) {
-      startMulti(state.pendingRoomFromUrl);
+      await joinRoom(state.pendingRoomFromUrl);
     } else {
       showModePanel();
     }
@@ -1409,7 +1424,7 @@ async function handleAuthSubmit(event) {
     renderViewerBadge();
 
     if (state.pendingRoomFromUrl) {
-      startMulti(state.pendingRoomFromUrl);
+      await joinRoom(state.pendingRoomFromUrl);
     } else {
       showModePanel();
     }
@@ -1476,7 +1491,7 @@ function bindEvents() {
     openDialog(elements.createRoomDialog);
   });
 
-  elements.createRoomForm.addEventListener("submit", (event) => {
+  elements.createRoomForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     const room = sanitizeRoom(elements.createRoomInput.value) || `room-${randomId(4)}`;
     const durations = {
@@ -1485,6 +1500,22 @@ function bindEvents() {
       long: clampMinutes(elements.createLongMinutes.value, 15) * 60_000
     };
 
+    try {
+      await apiRequest("/api/rooms", {
+        method: "POST",
+        body: JSON.stringify({
+          room,
+          focus: durations.focus / 60_000,
+          short: durations.short / 60_000,
+          long: durations.long / 60_000
+        })
+      });
+    } catch (error) {
+      elements.createRoomMessage.textContent = error.message || "Could not create room.";
+      return;
+    }
+
+    elements.createRoomMessage.textContent = "";
     state.name = normalizeName(elements.createNameInput.value || state.user?.username, state.user?.username || "Maker");
     elements.nameInput.value = state.name;
     localStorage.setItem(STORAGE_KEYS.displayName, state.name);
@@ -1495,7 +1526,7 @@ function bindEvents() {
   elements.closeCreateRoomButton.addEventListener("click", () => closeDialog(elements.createRoomDialog));
   bindDialogBackdrop(elements.createRoomDialog, () => closeDialog(elements.createRoomDialog));
 
-  elements.joinRoomForm.addEventListener("submit", (event) => {
+  elements.joinRoomForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     const room = sanitizeRoom(elements.joinRoomInput.value);
     if (!room) {
@@ -1504,7 +1535,7 @@ function bindEvents() {
     }
     elements.joinRoomMessage.textContent = "";
     elements.joinRoomInput.value = "";
-    startMulti(room);
+    await joinRoom(room);
   });
 
   elements.settingsButton.addEventListener("click", () => openDialog(elements.settingsDialog));
@@ -1583,36 +1614,6 @@ function bindEvents() {
   window.addEventListener("pointerdown", setAudioUnlocked, { passive: true });
   window.addEventListener("keydown", setAudioUnlocked);
   window.addEventListener("resize", scheduleResize);
-
-  elements.debugAssignHostBtn.addEventListener("click", async () => {
-    const room = String(state.room || "");
-    if (!room) {
-      elements.debugHostStatus.textContent = "Not in a room.";
-      return;
-    }
-    elements.debugHostStatus.textContent = `checking (room="${room}")…`;
-    const url = `${window.location.origin}/api/debug/assign-host?room=${encodeURIComponent(room)}`;
-    console.debug("[debug-host] fetching", url);
-    try {
-      const res = await fetch(url, { method: "POST" });
-      const text = await res.text();
-      if (!res.ok) {
-        elements.debugHostStatus.textContent = `Server ${res.status}: ${text.slice(0, 120)}`;
-        return;
-      }
-      const data = JSON.parse(text);
-      if (data.hadHost) {
-        elements.debugHostStatus.textContent = `Host OK — ${data.hostName} (${data.hostId})`;
-      } else if (data.hostName) {
-        elements.debugHostStatus.textContent = `No host → assigned ${data.hostName} (${data.hostId})`;
-      } else {
-        elements.debugHostStatus.textContent = "No host, no participants to assign.";
-      }
-    } catch (e) {
-      console.error("[debug-host] error", e);
-      elements.debugHostStatus.textContent = `Fetch error: ${e.message}`;
-    }
-  });
 }
 
 let lastRenderedTime = "";

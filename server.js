@@ -122,21 +122,23 @@ function createMusicState() {
 }
 
 function getRoom(roomId) {
-  if (!rooms.has(roomId)) {
-    rooms.set(roomId, {
-      id: roomId,
-      createdAt: Date.now(),
-      timer: createTimerState(),
-      music: createMusicState(),
-      hostId: null,
-      participants: new Map(),
-      clients: new Set(),
-      history: [],
-      messages: []
-    });
-  }
+  return rooms.get(roomId) || null;
+}
 
-  return rooms.get(roomId);
+function createRoom(roomId, durations = DEFAULT_DURATIONS) {
+  const room = {
+    id: roomId,
+    createdAt: Date.now(),
+    timer: createTimerState(durations),
+    music: createMusicState(),
+    hostId: null,
+    participants: new Map(),
+    clients: new Set(),
+    history: [],
+    messages: []
+  };
+  rooms.set(roomId, room);
+  return room;
 }
 
 function assignHostIfNeeded(room) {
@@ -938,6 +940,40 @@ async function handleHttpRequest(request, response) {
       return;
     }
 
+    if (request.method === "POST" && url.pathname === "/api/rooms") {
+      const user = getUserFromToken(extractToken(request));
+      if (!user) {
+        sendJson(response, 401, { error: "Unauthorized" });
+        return;
+      }
+      const rawBody = await readRequestBody(request);
+      const body = rawBody ? JSON.parse(rawBody) : {};
+      if (!body.room) {
+        sendJson(response, 400, { error: "Invalid room code." });
+        return;
+      }
+      const roomId = normalizeRoom(body.room);
+      if (rooms.has(roomId)) {
+        sendJson(response, 409, { error: "Room already exists." });
+        return;
+      }
+      const fakeParams = { get: (key) => body[key] != null ? String(body[key]) : null };
+      const durations = parseInitialDurations(fakeParams);
+      createRoom(roomId, durations);
+      sendJson(response, 201, { room: roomId });
+      return;
+    }
+
+    if (request.method === "GET" && url.pathname.startsWith("/api/rooms/")) {
+      const roomId = normalizeRoom(decodeURIComponent(url.pathname.slice("/api/rooms/".length)));
+      if (rooms.has(roomId)) {
+        sendJson(response, 200, { room: roomId });
+      } else {
+        sendJson(response, 404, { error: "Room not found." });
+      }
+      return;
+    }
+
     if (request.method === "POST" && url.pathname === "/api/debug/assign-host") {
       const roomId = normalizeRoom(url.searchParams.get("room"));
       const room = rooms.get(roomId);
@@ -988,9 +1024,10 @@ function handleUpgrade(request, socket) {
   const name = normalizeDisplayName(url.searchParams.get("name") || user.username, user.username);
   const room = getRoom(roomId);
 
-  if (room.clients.size === 0) {
-    room.timer = createTimerState(parseInitialDurations(url.searchParams));
-    room.timer.lastUpdatedBy = name;
+  if (!room) {
+    socket.write("HTTP/1.1 404 Not Found\r\n\r\n");
+    socket.destroy();
+    return;
   }
 
   const accept = crypto

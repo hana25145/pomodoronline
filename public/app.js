@@ -277,6 +277,31 @@ const THEMES = {
       "--ring-track":     "oklch(83%  0.012 76)",
       "--ring-progress":  "oklch(50%  0.135 56)"
     }
+  },
+  crimson: {
+    label: "Crimson",
+    colorScheme: "light",
+    swatchBg: "oklch(99% 0.002 0)",
+    swatchAccent: "oklch(52% 0.210 22)",
+    swatchInk: "oklch(22% 0.018 20)",
+    vars: {
+      "--bg":             "oklch(99%  0.002 0)",
+      "--surface":        "oklch(96%  0.006 10)",
+      "--surface-mid":    "oklch(92%  0.010 12)",
+      "--surface-strong": "oklch(87%  0.014 14)",
+      "--ink":            "oklch(22%  0.018 20)",
+      "--muted":          "oklch(42%  0.012 15)",
+      "--subtle":         "oklch(58%  0.008 10)",
+      "--line":           "oklch(88%  0.008 8)",
+      "--accent":         "oklch(52%  0.210 22)",
+      "--accent-dim":     "oklch(43%  0.170 22)",
+      "--accent-soft":    "oklch(94%  0.055 18)",
+      "--accent-ink":     "oklch(99%  0.002 0)",
+      "--ok":             "oklch(44%  0.120 148)",
+      "--focus-ring":     "oklch(52%  0.210 22 / 0.22)",
+      "--ring-track":     "oklch(88%  0.008 8)",
+      "--ring-progress":  "oklch(52%  0.210 22)"
+    }
   }
 };
 
@@ -292,7 +317,7 @@ const state = {
   isHost: false,
   name: "",
   color: localStorage.getItem(STORAGE_KEYS.color) || "tomato",
-  theme: localStorage.getItem(STORAGE_KEYS.theme) || "midnight",
+  theme: localStorage.getItem(STORAGE_KEYS.theme) || "crimson",
   timer: createTimerState(),
   serverOffset: 0,
   participants: [],

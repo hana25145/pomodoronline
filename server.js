@@ -128,7 +128,7 @@ function getRoom(roomId) {
       createdAt: Date.now(),
       timer: createTimerState(),
       music: createMusicState(),
-      hostToken: null,
+      hostId: null,
       participants: new Map(),
       clients: new Set(),
       history: [],
@@ -137,6 +137,28 @@ function getRoom(roomId) {
   }
 
   return rooms.get(roomId);
+}
+
+function assignHostIfNeeded(room) {
+  if (room.hostId && [...room.clients].some((c) => c.id === room.hostId)) {
+    return;
+  }
+
+  const clients = [...room.clients];
+  if (clients.length === 0) {
+    room.hostId = null;
+    return;
+  }
+
+  const newHost = clients[Math.floor(Math.random() * clients.length)];
+  room.hostId = newHost.id;
+
+  for (const client of room.clients) {
+    client.isHost = client.id === room.hostId;
+    client.participant.isHost = client.isHost;
+  }
+
+  addHistory(room, newHost.participant.name, "is now the host");
 }
 
 function hashPassword(password, salt) {
@@ -609,6 +631,7 @@ function removeClient(socket) {
   room.clients.delete(client);
   room.participants.delete(client.id);
   addHistory(room, client.participant.name, "left quietly");
+  assignHostIfNeeded(room);
   broadcast(room);
 
   if (room.clients.size === 0) {
@@ -915,6 +938,29 @@ async function handleHttpRequest(request, response) {
       return;
     }
 
+    if (request.method === "POST" && url.pathname === "/api/debug/assign-host") {
+      const roomId = normalizeRoom(url.searchParams.get("room"));
+      const room = rooms.get(roomId);
+      if (!room) {
+        sendJson(response, 404, { error: "Room not found", roomId });
+        return;
+      }
+      const hadHost = room.hostId && [...room.clients].some((c) => c.id === room.hostId);
+      assignHostIfNeeded(room);
+      const newHostClient = [...room.clients].find((c) => c.id === room.hostId);
+      const hostName = newHostClient?.participant?.name ?? null;
+      if (!hadHost && hostName) {
+        broadcast(room);
+      }
+      sendJson(response, 200, {
+        hadHost,
+        hostId: room.hostId,
+        hostName,
+        participants: [...room.participants.values()].map((p) => ({ id: p.id, name: p.name, isHost: p.isHost }))
+      });
+      return;
+    }
+
     serveStatic(request, response, url);
   } catch (error) {
     sendJson(response, 500, { error: error instanceof Error ? error.message : "Server error." });
@@ -940,16 +986,13 @@ function handleUpgrade(request, socket) {
 
   const roomId = normalizeRoom(url.searchParams.get("room"));
   const name = normalizeDisplayName(url.searchParams.get("name") || user.username, user.username);
-  const requestedHostToken = String(url.searchParams.get("host") || "").slice(0, 160);
   const room = getRoom(roomId);
 
-  if (!room.hostToken && requestedHostToken) {
-    room.hostToken = requestedHostToken;
+  if (room.clients.size === 0) {
     room.timer = createTimerState(parseInitialDurations(url.searchParams));
     room.timer.lastUpdatedBy = name;
   }
 
-  const isHost = Boolean(requestedHostToken && room.hostToken === requestedHostToken);
   const accept = crypto
     .createHash("sha1")
     .update(`${key}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`)
@@ -970,7 +1013,7 @@ function handleUpgrade(request, socket) {
     username: user.username,
     name,
     color: url.searchParams.get("color") || "tomato",
-    isHost,
+    isHost: false,
     joinedAt: Date.now(),
     lastSeen: Date.now()
   };
@@ -981,7 +1024,7 @@ function handleUpgrade(request, socket) {
     user,
     socket,
     participant,
-    isHost,
+    isHost: false,
     buffer: Buffer.alloc(0)
   };
 
@@ -989,7 +1032,7 @@ function handleUpgrade(request, socket) {
   room.clients.add(client);
   room.participants.set(id, participant);
   addHistory(room, name, "joined the room");
-  broadcast(room);
+  assignHostIfNeeded(room);
 
   socket.on("data", (chunk) => {
     client.buffer = Buffer.concat([client.buffer, chunk]);

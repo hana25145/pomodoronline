@@ -39,8 +39,8 @@ const THEMES = {
       "--surface-mid":    "oklch(18%  0.016 60)",
       "--surface-strong": "oklch(23%  0.020 62)",
       "--ink":            "oklch(93%  0.008 72)",
-      "--muted":          "oklch(42%  0.018 68)",
-      "--subtle":         "oklch(28%  0.015 64)",
+      "--muted":          "oklch(62%  0.018 68)",
+      "--subtle":         "oklch(55%  0.015 64)",
       "--line":           "oklch(22%  0.016 62)",
       "--accent":         "oklch(72%  0.130 76)",
       "--accent-dim":     "oklch(58%  0.100 76)",
@@ -64,8 +64,8 @@ const THEMES = {
       "--surface-mid":    "oklch(17%  0.020 152)",
       "--surface-strong": "oklch(22%  0.022 150)",
       "--ink":            "oklch(92%  0.010 120)",
-      "--muted":          "oklch(44%  0.020 145)",
-      "--subtle":         "oklch(27%  0.018 148)",
+      "--muted":          "oklch(62%  0.020 145)",
+      "--subtle":         "oklch(55%  0.018 148)",
       "--line":           "oklch(21%  0.020 150)",
       "--accent":         "oklch(65%  0.140 148)",
       "--accent-dim":     "oklch(52%  0.110 148)",
@@ -89,8 +89,8 @@ const THEMES = {
       "--surface-mid":    "oklch(17%  0.020 235)",
       "--surface-strong": "oklch(22%  0.022 232)",
       "--ink":            "oklch(92%  0.008 215)",
-      "--muted":          "oklch(44%  0.020 230)",
-      "--subtle":         "oklch(27%  0.018 232)",
+      "--muted":          "oklch(62%  0.020 230)",
+      "--subtle":         "oklch(55%  0.018 232)",
       "--line":           "oklch(21%  0.020 234)",
       "--accent":         "oklch(65%  0.130 228)",
       "--accent-dim":     "oklch(52%  0.100 228)",
@@ -114,8 +114,8 @@ const THEMES = {
       "--surface-mid":    "oklch(17%  0.018 5)",
       "--surface-strong": "oklch(22%  0.020 8)",
       "--ink":            "oklch(93%  0.008 20)",
-      "--muted":          "oklch(44%  0.018 10)",
-      "--subtle":         "oklch(27%  0.015 8)",
+      "--muted":          "oklch(62%  0.018 10)",
+      "--subtle":         "oklch(55%  0.015 8)",
       "--line":           "oklch(21%  0.018 6)",
       "--accent":         "oklch(67%  0.115 10)",
       "--accent-dim":     "oklch(54%  0.090 10)",
@@ -139,8 +139,8 @@ const THEMES = {
       "--surface-mid":    "oklch(90%  0.010 76)",
       "--surface-strong": "oklch(85%  0.012 74)",
       "--ink":            "oklch(22%  0.018 56)",
-      "--muted":          "oklch(54%  0.015 60)",
-      "--subtle":         "oklch(72%  0.010 68)",
+      "--muted":          "oklch(40%  0.015 60)",
+      "--subtle":         "oklch(50%  0.010 68)",
       "--line":           "oklch(84%  0.010 72)",
       "--accent":         "oklch(52%  0.160 36)",
       "--accent-dim":     "oklch(44%  0.130 36)",
@@ -164,8 +164,8 @@ const THEMES = {
       "--surface-mid":    "oklch(17%  0.010 235)",
       "--surface-strong": "oklch(22%  0.012 232)",
       "--ink":            "oklch(90%  0.006 230)",
-      "--muted":          "oklch(45%  0.012 232)",
-      "--subtle":         "oklch(28%  0.010 234)",
+      "--muted":          "oklch(62%  0.012 232)",
+      "--subtle":         "oklch(55%  0.010 234)",
       "--line":           "oklch(21%  0.012 236)",
       "--accent":         "oklch(64%  0.090 255)",
       "--accent-dim":     "oklch(52%  0.070 255)",
@@ -175,6 +175,106 @@ const THEMES = {
       "--focus-ring":     "oklch(64%  0.090 255 / 0.28)",
       "--ring-track":     "oklch(21%  0.012 236)",
       "--ring-progress":  "oklch(64%  0.090 255)"
+    }
+  },
+  cream: {
+    label: "Cream",
+    colorScheme: "light",
+    swatchBg: "oklch(98% 0.004 55)",
+    swatchAccent: "oklch(54% 0.145 18)",
+    swatchInk: "oklch(22% 0.015 40)",
+    vars: {
+      "--bg":             "oklch(98%  0.004 55)",
+      "--surface":        "oklch(95%  0.006 54)",
+      "--surface-mid":    "oklch(91%  0.008 52)",
+      "--surface-strong": "oklch(86%  0.010 50)",
+      "--ink":            "oklch(22%  0.015 40)",
+      "--muted":          "oklch(40%  0.012 44)",
+      "--subtle":         "oklch(50%  0.008 50)",
+      "--line":           "oklch(86%  0.008 52)",
+      "--accent":         "oklch(54%  0.145 18)",
+      "--accent-dim":     "oklch(44%  0.115 18)",
+      "--accent-soft":    "oklch(93%  0.040 22)",
+      "--accent-ink":     "oklch(98%  0.004 55)",
+      "--ok":             "oklch(44%  0.120 148)",
+      "--focus-ring":     "oklch(54%  0.145 18 / 0.22)",
+      "--ring-track":     "oklch(86%  0.008 52)",
+      "--ring-progress":  "oklch(54%  0.145 18)"
+    }
+  },
+  sage: {
+    label: "Sage",
+    colorScheme: "light",
+    swatchBg: "oklch(96% 0.010 150)",
+    swatchAccent: "oklch(40% 0.110 158)",
+    swatchInk: "oklch(22% 0.020 155)",
+    vars: {
+      "--bg":             "oklch(96%  0.010 150)",
+      "--surface":        "oklch(93%  0.012 148)",
+      "--surface-mid":    "oklch(88%  0.014 146)",
+      "--surface-strong": "oklch(83%  0.016 144)",
+      "--ink":            "oklch(22%  0.020 155)",
+      "--muted":          "oklch(48%  0.016 148)",
+      "--subtle":         "oklch(68%  0.010 145)",
+      "--line":           "oklch(83%  0.012 146)",
+      "--accent":         "oklch(40%  0.110 158)",
+      "--accent-dim":     "oklch(33%  0.090 158)",
+      "--accent-soft":    "oklch(91%  0.040 152)",
+      "--accent-ink":     "oklch(96%  0.010 150)",
+      "--ok":             "oklch(40%  0.110 158)",
+      "--focus-ring":     "oklch(40%  0.110 158 / 0.22)",
+      "--ring-track":     "oklch(83%  0.012 146)",
+      "--ring-progress":  "oklch(40%  0.110 158)"
+    }
+  },
+  sky: {
+    label: "Sky",
+    colorScheme: "light",
+    swatchBg: "oklch(97% 0.008 225)",
+    swatchAccent: "oklch(44% 0.120 248)",
+    swatchInk: "oklch(22% 0.020 240)",
+    vars: {
+      "--bg":             "oklch(97%  0.008 225)",
+      "--surface":        "oklch(93%  0.010 224)",
+      "--surface-mid":    "oklch(89%  0.012 222)",
+      "--surface-strong": "oklch(84%  0.014 220)",
+      "--ink":            "oklch(22%  0.020 240)",
+      "--muted":          "oklch(48%  0.016 232)",
+      "--subtle":         "oklch(68%  0.010 226)",
+      "--line":           "oklch(84%  0.010 222)",
+      "--accent":         "oklch(44%  0.120 248)",
+      "--accent-dim":     "oklch(36%  0.095 248)",
+      "--accent-soft":    "oklch(92%  0.040 228)",
+      "--accent-ink":     "oklch(97%  0.008 225)",
+      "--ok":             "oklch(44%  0.120 148)",
+      "--focus-ring":     "oklch(44%  0.120 248 / 0.22)",
+      "--ring-track":     "oklch(84%  0.010 222)",
+      "--ring-progress":  "oklch(44%  0.120 248)"
+    }
+  },
+  sand: {
+    label: "Sand",
+    colorScheme: "light",
+    swatchBg: "oklch(96% 0.012 82)",
+    swatchAccent: "oklch(50% 0.135 56)",
+    swatchInk: "oklch(22% 0.018 58)",
+    vars: {
+      "--bg":             "oklch(96%  0.012 82)",
+      "--surface":        "oklch(93%  0.014 80)",
+      "--surface-mid":    "oklch(88%  0.016 78)",
+      "--surface-strong": "oklch(83%  0.018 76)",
+      "--ink":            "oklch(22%  0.018 58)",
+      "--muted":          "oklch(50%  0.014 62)",
+      "--subtle":         "oklch(70%  0.010 70)",
+      "--line":           "oklch(83%  0.012 76)",
+      "--accent":         "oklch(50%  0.135 56)",
+      "--accent-dim":     "oklch(41%  0.108 56)",
+      "--accent-soft":    "oklch(92%  0.042 72)",
+      "--accent-ink":     "oklch(96%  0.012 82)",
+      "--ok":             "oklch(44%  0.120 148)",
+      "--focus-ring":     "oklch(50%  0.135 56 / 0.22)",
+      "--ring-track":     "oklch(83%  0.012 76)",
+      "--ring-progress":  "oklch(50%  0.135 56)"
     }
   }
 };
@@ -187,7 +287,6 @@ const state = {
   session: "entry",
   socket: null,
   room: "",
-  hostToken: "",
   pendingRoomSetup: null,
   isHost: false,
   name: "",
@@ -220,6 +319,7 @@ const elements = {
   authForm: document.querySelector("#authForm"),
   authUsernameInput: document.querySelector("#authUsernameInput"),
   authPasswordInput: document.querySelector("#authPasswordInput"),
+  pwHint: document.querySelector("#pwHint"),
   authSubmitButton: document.querySelector("#authSubmitButton"),
   authMessage: document.querySelector("#authMessage"),
   accountBadge: document.querySelector("#accountBadge"),
@@ -249,8 +349,6 @@ const elements = {
   homeButton: document.querySelector("#homeButton"),
   modeLabel: document.querySelector("#modeLabel"),
   timeReadout: document.querySelector("#timeReadout"),
-  subline: document.querySelector("#subline"),
-  nextMode: document.querySelector("#nextMode"),
   startPauseButton: document.querySelector("#startPauseButton"),
   resetButton: document.querySelector("#resetButton"),
   primaryActions: document.querySelector("#primaryActions"),
@@ -259,13 +357,10 @@ const elements = {
   settingsKicker: document.querySelector("#settingsKicker"),
   settingsUsername: document.querySelector("#settingsUsername"),
   settingsLogoutButton: document.querySelector("#settingsLogoutButton"),
-  roomInput: document.querySelector("#roomInput"),
-  copyLinkButton: document.querySelector("#copyLinkButton"),
+  roomCodeButton: document.querySelector("#roomCodeButton"),
   nameInput: document.querySelector("#nameInput"),
   colorRow: document.querySelector("#colorRow"),
-  participantList: document.querySelector("#participantList"),
-  participantCount: document.querySelector("#participantCount"),
-  historyList: document.querySelector("#historyList"),
+  participantsBar: document.querySelector("#participantsBar"),
   modeButtons: [...document.querySelectorAll("[data-mode]")],
   rhythmForm: document.querySelector("#rhythmForm"),
   focusMinutes: document.querySelector("#focusMinutes"),
@@ -280,7 +375,6 @@ const elements = {
   chatInput: document.querySelector("#chatInput"),
   musicCurrentTitle: document.querySelector("#musicCurrentTitle"),
   musicCurrentMeta: document.querySelector("#musicCurrentMeta"),
-  musicResumeButton: document.querySelector("#musicResumeButton"),
   musicSkipButton: document.querySelector("#musicSkipButton"),
   musicSearchForm: document.querySelector("#musicSearchForm"),
   musicSearchInput: document.querySelector("#musicSearchInput"),
@@ -292,7 +386,10 @@ const elements = {
   musicSearchSubmitButton: document.querySelector("#musicSearchForm button[type='submit']"),
   chatSubmitButton: document.querySelector("#chatForm button[type='submit']"),
   youtubePlayerHost: document.querySelector("#youtubePlayerHost"),
-  canvas: document.querySelector("#focusCanvas")
+  canvas: document.querySelector("#focusCanvas"),
+  debugHostBar: document.querySelector("#debugHostBar"),
+  debugAssignHostBtn: document.querySelector("#debugAssignHostBtn"),
+  debugHostStatus: document.querySelector("#debugHostStatus")
 };
 
 const context = elements.canvas.getContext("2d");
@@ -330,10 +427,6 @@ function renderThemes() {
     button.style.setProperty("--swatch-ink", theme.swatchInk);
     button.setAttribute("aria-label", `${theme.label} theme`);
     button.setAttribute("title", theme.label);
-    const label = document.createElement("span");
-    label.className = "theme-swatch-label";
-    label.textContent = theme.label;
-    button.append(label);
     button.addEventListener("click", () => applyTheme(id));
     elements.themeGrid.append(button);
   }
@@ -385,18 +478,6 @@ function randomId(bytes) {
   return [...values].map((value) => value.toString(16).padStart(2, "0")).join("");
 }
 
-function hostStorageKey(room) {
-  return `pmdr.host.${room}`;
-}
-
-function storeHostToken(room, token) {
-  localStorage.setItem(hostStorageKey(room), token);
-}
-
-function getStoredHostToken(room) {
-  return localStorage.getItem(hostStorageKey(room)) || "";
-}
-
 function authHeaders() {
   return state.authToken ? { Authorization: `Bearer ${state.authToken}` } : {};
 }
@@ -423,8 +504,11 @@ function setAuthMode(mode) {
   state.authMode = mode;
   elements.loginTabButton.classList.toggle("is-active", mode === "login");
   elements.signupTabButton.classList.toggle("is-active", mode === "signup");
+  elements.loginTabButton.setAttribute("aria-pressed", String(mode === "login"));
+  elements.signupTabButton.setAttribute("aria-pressed", String(mode === "signup"));
   elements.authSubmitButton.textContent = mode === "login" ? "Login" : "Create account";
   elements.authPasswordInput.autocomplete = mode === "login" ? "current-password" : "new-password";
+  elements.pwHint.hidden = mode === "login";
 }
 
 function setAuthMessage(message) {
@@ -435,26 +519,12 @@ function setMusicMessage(message) {
   elements.musicMessage.textContent = message;
 }
 
-function setNotice(message, duration = 4000) {
-  state.noticeText = message;
-  state.noticeUntil = message ? Date.now() + duration : 0;
-  updateSubline();
+function setNotice() {
+  /* subline removed */
 }
 
 function updateSubline() {
-  if (state.noticeText && Date.now() < state.noticeUntil) {
-    elements.subline.textContent = state.noticeText;
-    return;
-  }
-
-  state.noticeText = "";
-  state.noticeUntil = 0;
-  if (state.session === "multi") {
-    const role = state.isHost ? "Host" : "Guest";
-    elements.subline.textContent = `${role} - ${state.timer.lastUpdatedBy || "Room"}`;
-  } else {
-    elements.subline.textContent = MODE_COPY[state.timer.mode].text;
-  }
+  /* subline removed */
 }
 
 function renderViewerBadge() {
@@ -610,9 +680,8 @@ function getProgress() {
 }
 
 function drawTimer(progress, t = 0) {
-  const canvas = elements.canvas;
-  const width = canvas.clientWidth;
-  const height = canvas.clientHeight;
+  const width = canvasDrawWidth;
+  const height = canvasDrawHeight;
   const cx = width / 2;
   const cy = height / 2;
   const radius = Math.min(width, height) * 0.40;
@@ -680,6 +749,8 @@ function resizeCanvas() {
     return;
   }
   const rect = elements.canvas.getBoundingClientRect();
+  canvasDrawWidth = rect.width;
+  canvasDrawHeight = rect.height;
   const ratio = Math.min(window.devicePixelRatio || 1, 2);
   elements.canvas.width = Math.max(1, Math.floor(rect.width * ratio));
   elements.canvas.height = Math.max(1, Math.floor(rect.height * ratio));
@@ -717,21 +788,46 @@ function updateUrl(room = "") {
 /* Tracks whether the user has gestured in this tab session (resets on refresh) */
 let audioInitializedInTab = false;
 
+function playBell() {
+  if (!audioInitializedInTab) return;
+  try {
+    const ctx = new AudioContext();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = "sine";
+    osc.frequency.value = 1047; // C6 — clear chime
+    const t = ctx.currentTime;
+    gain.gain.setValueAtTime(0.35, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 1.8);
+    osc.start(t);
+    osc.stop(t + 1.8);
+    osc.onended = () => ctx.close();
+  } catch (_) {}
+}
+
 function setAudioUnlocked() {
   if (audioInitializedInTab) return;
   audioInitializedInTab = true;
   state.audioUnlocked = true;
   sessionStorage.setItem("pmdr.audioUnlocked", "1");
-  if (state.session === "multi" && state.music.current) {
-    syncMusicPlayer(true);
+  if (state.session === "multi" && state.music.current && !state.musicMuted) {
+    // Unmute the existing iframe rather than recreating it — recreation seeks to a
+    // calculated position and causes drift vs. other participants. The iframe has been
+    // playing silently with &mute=1 since page load, so its position is already correct.
+    const iframe = elements.youtubePlayerHost.querySelector("iframe");
+    if (iframe) {
+      iframe.contentWindow.postMessage(JSON.stringify({ event: "command", func: "unMute", args: [] }), "*");
+    } else {
+      syncMusicPlayer(true); // no iframe yet (e.g. music started after gesture), fall back
+    }
   }
-  elements.musicResumeButton.hidden = true;
 }
 
 function clearMusicPlayer() {
   state.playerKey = "";
   elements.youtubePlayerHost.innerHTML = "";
-  elements.musicResumeButton.hidden = true;
 }
 
 function syncMusicPlayer(force = false) {
@@ -747,7 +843,9 @@ function syncMusicPlayer(force = false) {
   }
 
   const startSeconds = Math.max(0, Math.floor((Date.now() + state.serverOffset - current.startedAt) / 1000));
-  const muteParam = state.musicMuted ? "&mute=1" : "";
+  /* Start muted on fresh page loads — browsers always allow muted autoplay.
+     setAudioUnlocked() will unMute via postMessage on first gesture (no recreation). */
+  const muteParam = (state.musicMuted || !audioInitializedInTab) ? "&mute=1" : "";
   elements.youtubePlayerHost.innerHTML = `
     <iframe
       width="1"
@@ -761,7 +859,6 @@ function syncMusicPlayer(force = false) {
     ></iframe>
   `;
   state.playerKey = key;
-  elements.musicResumeButton.hidden = audioInitializedInTab;
 }
 
 function canControlTimer() {
@@ -787,9 +884,10 @@ function updateControls() {
   const isMulti = state.session === "multi";
   const canUseRoomPanels = isMulti && Boolean(state.user);
 
-  elements.settingsButton.hidden = !canControl;
+  elements.settingsButton.hidden = false;
   elements.primaryActions.hidden = !canControl;
   elements.musicSkipButton.hidden = !(isMulti && state.isHost && state.music.current);
+  elements.debugHostBar.style.display = isMulti ? "block" : "none";
 
   for (const section of elements.multiOnlySections) {
     section.hidden = !isMulti;
@@ -825,12 +923,14 @@ function applyTimerToUI() {
   lastRenderedProgress = -1;
   elements.modeLabel.textContent = MODE_COPY[state.timer.mode].label;
   elements.timeReadout.textContent = formatTime(getRemaining());
-  elements.nextMode.textContent = `Next: ${MODE_COPY[getNextMode(state.timer.mode, state.timer.focusSessionsDone)].label}`;
+
   elements.startPauseButton.textContent = state.timer.status === "running" ? "Pause" : "Start";
   elements.startPauseButton.className = `action-button ${state.timer.status === "running" ? "pause" : "start"}`;
 
   for (const button of elements.modeButtons) {
-    button.classList.toggle("is-active", button.dataset.mode === state.timer.mode);
+    const isActive = button.dataset.mode === state.timer.mode;
+    button.classList.toggle("is-active", isActive);
+    button.setAttribute("aria-pressed", String(isActive));
   }
 
   elements.focusMinutes.value = msToMinutes(state.timer.durations.focus);
@@ -840,45 +940,25 @@ function applyTimerToUI() {
 }
 
 function renderParticipants() {
-  if (state.session !== "multi") {
-    elements.participantCount.textContent = "1";
-    elements.participantList.innerHTML = `<div class="history-item"><strong>${state.name}</strong><span>Only you</span></div>`;
-    return;
-  }
-
-  elements.participantCount.textContent = String(state.participants.length);
-  elements.participantList.innerHTML = "";
+  if (!elements.participantsBar) return;
+  elements.participantsBar.innerHTML = "";
+  if (state.session !== "multi") return;
 
   for (const participant of state.participants) {
-    const card = document.createElement("article");
-    card.className = "participant-card";
-    card.innerHTML = `
-      <span class="participant-avatar" style="--avatar: ${COLORS[participant.color] || COLORS.tomato}"></span>
-      <p class="participant-name"></p>
-      <span class="participant-status"></span>
-    `;
-    card.querySelector(".participant-name").textContent = participant.name;
-    card.querySelector(".participant-status").textContent = participant.isHost ? "Host" : "Guest";
-    elements.participantList.append(card);
+    const chip = document.createElement("span");
+    chip.className = `participant-chip${participant.isHost ? " is-host" : ""}`;
+    const dot = document.createElement("span");
+    dot.className = "participant-dot";
+    dot.style.setProperty("--avatar", COLORS[participant.color] || COLORS.tomato);
+    const name = document.createElement("span");
+    name.textContent = participant.isHost ? `${participant.name} (HOST)` : participant.name;
+    chip.append(dot, name);
+    elements.participantsBar.append(chip);
   }
 }
 
 function renderHistory() {
-  elements.historyList.innerHTML = "";
-  if (!state.history.length) {
-    elements.historyList.innerHTML = `<div class="history-item"><strong>Ready.</strong><span>No activity yet.</span></div>`;
-    return;
-  }
-
-  for (const entry of state.history) {
-    const item = document.createElement("div");
-    item.className = "history-item";
-    const time = new Date(entry.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-    item.innerHTML = `<strong></strong><span></span>`;
-    item.querySelector("strong").textContent = `${entry.by}: ${entry.text}`;
-    item.querySelector("span").textContent = time;
-    elements.historyList.append(item);
-  }
+  /* History list removed from UI; state.history is kept for internal use only. */
 }
 
 function scrollChatToBottom() {
@@ -888,12 +968,12 @@ function scrollChatToBottom() {
 function renderChat() {
   elements.chatList.innerHTML = "";
   if (state.session !== "multi" && !state.chat.length) {
-    elements.chatList.innerHTML = `<div class="history-item"><strong>Multi room chat</strong><span>Join a room to talk with others.</span></div>`;
+    elements.chatList.innerHTML = `<li class="history-item"><strong>Multi room chat</strong><span>Join a room to talk with others.</span></li>`;
     return;
   }
 
   for (const message of state.chat) {
-    const item = document.createElement("article");
+    const item = document.createElement("li");
     item.className = "chat-item";
     const time = new Date(message.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
     item.innerHTML = `
@@ -905,7 +985,9 @@ function renderChat() {
     `;
     item.querySelector(".chat-author").textContent = message.author.name;
     item.querySelector(".chat-text").textContent = message.text;
-    item.querySelector(".chat-meta").textContent = time;
+    const timeEl = item.querySelector(".chat-meta");
+    timeEl.textContent = time;
+    timeEl.dateTime = new Date(message.at).toISOString();
     elements.chatList.append(item);
   }
 
@@ -925,17 +1007,16 @@ function renderMusic() {
     ? `${countReservedTracksForViewer()} / ${state.music.maxPerUser || 5}`
     : "- / 5";
   elements.musicSkipButton.hidden = !(state.session === "multi" && state.isHost && current);
-  elements.musicResumeButton.hidden = !(state.session === "multi" && current && !audioInitializedInTab);
   if (state.session !== "multi" && !elements.musicMessage.textContent) {
     setMusicMessage("Music queue opens in multi rooms.");
   }
 
   elements.musicResults.innerHTML = "";
   for (const result of state.musicResults) {
-    const item = document.createElement("article");
+    const item = document.createElement("li");
     item.className = "music-result";
     item.innerHTML = `
-      <img class="music-thumb" alt="" />
+      <img class="music-thumb" alt="" loading="lazy" />
       <div>
         <div class="music-title"></div>
         <div class="music-meta"></div>
@@ -963,11 +1044,11 @@ function renderMusic() {
   queueItems.push(...state.music.queue);
 
   for (const track of queueItems) {
-    const item = document.createElement("article");
+    const item = document.createElement("li");
     item.className = "queue-item";
     const canRemove = state.isHost || track.requestedBy.username === state.user?.username;
     item.innerHTML = `
-      <img class="music-thumb" alt="" />
+      <img class="music-thumb" alt="" loading="lazy" />
       <div>
         <div class="queue-title"></div>
         <div class="queue-meta"></div>
@@ -998,7 +1079,10 @@ function renderMusic() {
   }
 }
 
+let lastKnownMode = null;
+
 function applySnapshot(payload) {
+  const prevMode = lastKnownMode;
   state.serverOffset = payload.serverNow - Date.now();
   state.timer = {
     ...payload.timer,
@@ -1010,8 +1094,14 @@ function applySnapshot(payload) {
   state.music = payload.music || { current: null, queue: [], maxPerUser: 5 };
   state.room = payload.room;
   state.isHost = Boolean(payload.isHost);
-  state.pendingRoomSetup = state.isHost ? null : state.pendingRoomSetup;
-  elements.roomInput.value = payload.room;
+  state.pendingRoomSetup = null;
+  if (elements.roomCodeButton) {
+    elements.roomCodeButton.textContent = payload.room;
+    elements.roomCodeButton.hidden = false;
+  }
+
+  lastKnownMode = state.timer.mode;
+  if (prevMode !== null && prevMode !== state.timer.mode) playBell();
 
   updateControls();
   applyTimerToUI();
@@ -1138,10 +1228,7 @@ function connect() {
     token: state.authToken
   });
 
-  if (state.hostToken) {
-    params.set("host", state.hostToken);
-  }
-  if (state.isHost && state.pendingRoomSetup?.durations) {
+  if (state.pendingRoomSetup?.durations) {
     params.set("focus", msToMinutes(state.pendingRoomSetup.durations.focus));
     params.set("short", msToMinutes(state.pendingRoomSetup.durations.short));
     params.set("long", msToMinutes(state.pendingRoomSetup.durations.long));
@@ -1181,7 +1268,6 @@ function startSolo() {
   clearMusicPlayer();
   state.session = "solo";
   state.room = "";
-  state.hostToken = "";
   state.pendingRoomSetup = null;
   state.isHost = true;
   state.serverOffset = 0;
@@ -1202,7 +1288,7 @@ function startSolo() {
   renderMusic();
 }
 
-function startMulti(room, hostToken = "", setup = null) {
+function startMulti(room, setup = null) {
   const nextRoom = sanitizeRoom(room);
   if (!nextRoom || !isAuthenticated()) {
     return;
@@ -1210,9 +1296,8 @@ function startMulti(room, hostToken = "", setup = null) {
 
   state.session = "multi";
   state.room = nextRoom;
-  state.hostToken = hostToken || getStoredHostToken(nextRoom);
   state.pendingRoomSetup = setup;
-  state.isHost = Boolean(state.hostToken);
+  state.isHost = false;
   state.timer = createTimerState(setup?.durations || DEFAULT_DURATIONS);
   state.participants = [];
   state.history = [];
@@ -1220,7 +1305,8 @@ function startMulti(room, hostToken = "", setup = null) {
   state.music = { current: null, queue: [], maxPerUser: 5 };
   state.musicResults = [];
   setMusicMessage("");
-  elements.roomInput.value = nextRoom;
+  elements.roomCodeButton.textContent = nextRoom;
+  elements.roomCodeButton.hidden = false;
   updateUrl(nextRoom);
   showTimerApp();
   updateControls();
@@ -1236,8 +1322,8 @@ function goHome() {
   closeAllDialogs(false);
   disconnect();
   clearMusicPlayer();
+  elements.roomCodeButton.hidden = true;
   state.room = "";
-  state.hostToken = "";
   state.pendingRoomSetup = null;
   state.isHost = false;
   state.serverOffset = 0;
@@ -1286,7 +1372,7 @@ async function restoreSession() {
     renderViewerBadge();
 
     if (state.pendingRoomFromUrl) {
-      startMulti(state.pendingRoomFromUrl, getStoredHostToken(state.pendingRoomFromUrl));
+      startMulti(state.pendingRoomFromUrl);
     } else {
       showModePanel();
     }
@@ -1320,7 +1406,7 @@ async function handleAuthSubmit(event) {
     renderViewerBadge();
 
     if (state.pendingRoomFromUrl) {
-      startMulti(state.pendingRoomFromUrl, getStoredHostToken(state.pendingRoomFromUrl));
+      startMulti(state.pendingRoomFromUrl);
     } else {
       showModePanel();
     }
@@ -1361,11 +1447,9 @@ function setPanelOpen(panel, open) {
   if (panel === "music") {
     state.musicPanelOpen = open;
     elements.musicPanel.classList.toggle("panel-closed", !open);
-    elements.workspaceShell.classList.toggle("music-closed", !open);
   } else {
     state.chatPanelOpen = open;
     elements.chatPanel.classList.toggle("panel-closed", !open);
-    elements.workspaceShell.classList.toggle("chat-closed", !open);
   }
 }
 
@@ -1392,7 +1476,6 @@ function bindEvents() {
   elements.createRoomForm.addEventListener("submit", (event) => {
     event.preventDefault();
     const room = sanitizeRoom(elements.createRoomInput.value) || `room-${randomId(4)}`;
-    const token = randomId(18);
     const durations = {
       focus: clampMinutes(elements.createFocusMinutes.value, 25) * 60_000,
       short: clampMinutes(elements.createShortMinutes.value, 5) * 60_000,
@@ -1402,9 +1485,8 @@ function bindEvents() {
     state.name = normalizeName(elements.createNameInput.value || state.user?.username, state.user?.username || "Maker");
     elements.nameInput.value = state.name;
     localStorage.setItem(STORAGE_KEYS.displayName, state.name);
-    storeHostToken(room, token);
     closeDialog(elements.createRoomDialog);
-    startMulti(room, token, { durations });
+    startMulti(room, { durations });
   });
 
   elements.closeCreateRoomButton.addEventListener("click", () => closeDialog(elements.createRoomDialog));
@@ -1422,11 +1504,7 @@ function bindEvents() {
     startMulti(room);
   });
 
-  elements.settingsButton.addEventListener("click", () => {
-    if (canControlTimer()) {
-      openDialog(elements.settingsDialog);
-    }
-  });
+  elements.settingsButton.addEventListener("click", () => openDialog(elements.settingsDialog));
   elements.closeSettingsButton.addEventListener("click", () => closeDialog(elements.settingsDialog));
   elements.settingsLogoutButton.addEventListener("click", logout);
   bindDialogBackdrop(elements.settingsDialog, () => closeDialog(elements.settingsDialog));
@@ -1468,12 +1546,12 @@ function bindEvents() {
     }
   });
 
-  elements.copyLinkButton.addEventListener("click", async () => {
+  elements.roomCodeButton.addEventListener("click", async () => {
     const url = shareUrl();
     try {
       await navigator.clipboard.writeText(url);
-      state.copiedUntil = Date.now() + 1800;
-      elements.copyLinkButton.textContent = "Copied";
+      elements.roomCodeButton.classList.add("copied");
+      setTimeout(() => elements.roomCodeButton.classList.remove("copied"), 1800);
     } catch {
       window.prompt("Room link", url);
     }
@@ -1490,12 +1568,6 @@ function bindEvents() {
   });
 
   elements.musicSearchForm.addEventListener("submit", handleMusicSearch);
-  elements.musicResumeButton.addEventListener("click", () => {
-    if (!state.music.current) {
-      return;
-    }
-    setAudioUnlocked();
-  });
   elements.musicSearchInput.addEventListener("keydown", (event) => {
     if (event.key === "Enter") {
       handleMusicSearch(event);
@@ -1508,10 +1580,37 @@ function bindEvents() {
   window.addEventListener("pointerdown", setAudioUnlocked, { passive: true });
   window.addEventListener("keydown", setAudioUnlocked);
   window.addEventListener("resize", scheduleResize);
+
+  elements.debugAssignHostBtn.addEventListener("click", async () => {
+    if (!state.room) {
+      elements.debugHostStatus.textContent = "Not in a room.";
+      return;
+    }
+    elements.debugHostStatus.textContent = "checking…";
+    try {
+      const res = await fetch(`/api/debug/assign-host?room=${encodeURIComponent(state.room)}`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) {
+        elements.debugHostStatus.textContent = `Error: ${data.error}`;
+        return;
+      }
+      if (data.hadHost) {
+        elements.debugHostStatus.textContent = `Host OK — ${data.hostName} (${data.hostId})`;
+      } else if (data.hostName) {
+        elements.debugHostStatus.textContent = `No host found → assigned ${data.hostName} (${data.hostId})`;
+      } else {
+        elements.debugHostStatus.textContent = "No host, no participants to assign.";
+      }
+    } catch (e) {
+      elements.debugHostStatus.textContent = `Fetch error: ${e.message}`;
+    }
+  });
 }
 
 let lastRenderedTime = "";
 let lastRenderedProgress = -1;
+let canvasDrawWidth = 0;
+let canvasDrawHeight = 0;
 
 function tick() {
   if (!elements.timerApp.hidden) {
@@ -1524,6 +1623,7 @@ function tick() {
     }
 
     if (state.session === "solo" && state.timer.status === "running" && remaining <= 0) {
+      playBell();
       transitionTimer(state.timer, "Timer");
       addLocalHistory("Timer", `${state.timer.mode} started`);
       applyTimerToUI();
@@ -1535,10 +1635,6 @@ function tick() {
     if (waveActive || Math.abs(progress - lastRenderedProgress) > 0.0002) {
       lastRenderedProgress = progress;
       drawTimer(progress, waveActive ? performance.now() : 0);
-    }
-
-    if (Date.now() > state.copiedUntil && elements.copyLinkButton.textContent !== "Link") {
-      elements.copyLinkButton.textContent = "Link";
     }
 
     if (state.noticeText && Date.now() > state.noticeUntil) {

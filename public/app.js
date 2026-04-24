@@ -48,7 +48,8 @@ const state = {
   copiedUntil: 0,
   noticeText: "",
   noticeUntil: 0,
-  playerKey: ""
+  playerKey: "",
+  audioUnlocked: false
 };
 
 const elements = {
@@ -113,6 +114,7 @@ const elements = {
   chatInput: document.querySelector("#chatInput"),
   musicCurrentTitle: document.querySelector("#musicCurrentTitle"),
   musicCurrentMeta: document.querySelector("#musicCurrentMeta"),
+  musicResumeButton: document.querySelector("#musicResumeButton"),
   musicSkipButton: document.querySelector("#musicSkipButton"),
   musicSearchForm: document.querySelector("#musicSearchForm"),
   musicSearchInput: document.querySelector("#musicSearchInput"),
@@ -478,10 +480,12 @@ function updateUrl(room = "") {
 
 function clearMusicPlayer() {
   state.playerKey = "";
+  state.audioUnlocked = false;
   elements.youtubePlayerHost.innerHTML = "";
+  elements.musicResumeButton.hidden = true;
 }
 
-function syncMusicPlayer() {
+function syncMusicPlayer(force = false) {
   if (state.session !== "multi" || !state.music.current) {
     clearMusicPlayer();
     return;
@@ -489,7 +493,7 @@ function syncMusicPlayer() {
 
   const current = state.music.current;
   const key = `${current.id}:${current.startedAt}`;
-  if (state.playerKey === key) {
+  if (!force && state.playerKey === key) {
     return;
   }
 
@@ -498,7 +502,7 @@ function syncMusicPlayer() {
     <iframe
       width="1"
       height="1"
-      src="https://www.youtube.com/embed/${encodeURIComponent(current.videoId)}?autoplay=1&controls=0&start=${startSeconds}&playsinline=1&modestbranding=1&rel=0"
+      src="https://www.youtube.com/embed/${encodeURIComponent(current.videoId)}?autoplay=1&controls=0&start=${startSeconds}&playsinline=1&modestbranding=1&rel=0&enablejsapi=1"
       title="Background music"
       frameborder="0"
       allow="autoplay; encrypted-media"
@@ -507,6 +511,7 @@ function syncMusicPlayer() {
     ></iframe>
   `;
   state.playerKey = key;
+  elements.musicResumeButton.hidden = state.audioUnlocked;
 }
 
 function canControlTimer() {
@@ -624,6 +629,10 @@ function renderHistory() {
   }
 }
 
+function scrollChatToBottom() {
+  elements.chatList.scrollTop = elements.chatList.scrollHeight;
+}
+
 function renderChat() {
   elements.chatList.innerHTML = "";
   if (state.session !== "multi" && !state.chat.length) {
@@ -635,12 +644,20 @@ function renderChat() {
     const item = document.createElement("article");
     item.className = "chat-item";
     const time = new Date(message.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-    item.innerHTML = `<div class="chat-author"></div><div></div><div class="chat-meta"></div>`;
+    item.innerHTML = `
+      <div class="chat-main">
+        <span class="chat-author"></span>
+        <span class="chat-text"></span>
+      </div>
+      <time class="chat-meta"></time>
+    `;
     item.querySelector(".chat-author").textContent = message.author.name;
-    item.querySelector("div:nth-child(2)").textContent = message.text;
+    item.querySelector(".chat-text").textContent = message.text;
     item.querySelector(".chat-meta").textContent = time;
     elements.chatList.append(item);
   }
+
+  requestAnimationFrame(scrollChatToBottom);
 }
 
 function renderMusic() {
@@ -656,6 +673,7 @@ function renderMusic() {
     ? `${countReservedTracksForViewer()} / ${state.music.maxPerUser || 5}`
     : "- / 5";
   elements.musicSkipButton.hidden = !(state.session === "multi" && state.isHost && current);
+  elements.musicResumeButton.hidden = !(state.session === "multi" && current && !state.audioUnlocked);
   if (state.session !== "multi" && !elements.musicMessage.textContent) {
     setMusicMessage("Music queue opens in multi rooms.");
   }
@@ -1101,6 +1119,13 @@ function bindDialogBackdrop(dialog, closeFn) {
 
 function bindEvents() {
   setAuthMode("login");
+  const unlockAudio = () => {
+    if (state.audioUnlocked || state.session !== "multi" || !state.music.current) {
+      return;
+    }
+    state.audioUnlocked = true;
+    syncMusicPlayer(true);
+  };
 
   elements.loginTabButton.addEventListener("click", () => setAuthMode("login"));
   elements.signupTabButton.addEventListener("click", () => setAuthMode("signup"));
@@ -1204,6 +1229,13 @@ function bindEvents() {
   });
 
   elements.musicSearchForm.addEventListener("submit", handleMusicSearch);
+  elements.musicResumeButton.addEventListener("click", () => {
+    if (!state.music.current) {
+      return;
+    }
+    state.audioUnlocked = true;
+    syncMusicPlayer(true);
+  });
   elements.musicSearchInput.addEventListener("keydown", (event) => {
     if (event.key === "Enter") {
       handleMusicSearch(event);
@@ -1213,6 +1245,8 @@ function bindEvents() {
     send({ type: "music", action: "skip" });
   });
 
+  window.addEventListener("pointerdown", unlockAudio, { passive: true });
+  window.addEventListener("keydown", unlockAudio);
   window.addEventListener("resize", resizeCanvas);
 }
 

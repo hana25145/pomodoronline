@@ -102,20 +102,17 @@
       <section class="workspace-shell">
         <aside class="side-panel music-panel" aria-label="Music panel">
           <div class="side-panel-head">
-            <div>
-              <p class="section-kicker">Room</p>
-              <h2>Music</h2>
-            </div>
+            <h2 class="side-title">Music</h2>
             <button id="musicSkipButton" class="icon-button host-only-button" type="button" hidden>Skip</button>
           </div>
 
-          <section class="side-section" aria-label="Now playing">
-            <p class="section-kicker">Now Playing</p>
+          <section class="side-section music-now-section" aria-label="Now playing">
             <h2 id="musicCurrentTitle">Nothing playing</h2>
             <p class="music-meta" id="musicCurrentMeta">Queue is empty.</p>
+            <button id="musicResumeButton" class="icon-button" type="button" hidden>Resume Audio</button>
           </section>
 
-          <section class="side-section" aria-label="Search music">
+          <section class="side-section music-search-section" aria-label="Search music">
             <form class="music-search-form" id="musicSearchForm">
               <input id="musicSearchInput" maxlength="120" autocomplete="off" placeholder="Search YouTube music" />
               <button class="icon-button" type="submit">Search</button>
@@ -124,13 +121,13 @@
             <div class="music-results" id="musicResults"></div>
           </section>
 
-          <section class="side-section" aria-label="Queue">
-            <div class="panel-heading">
-              <div>
-                <p class="section-kicker">Queue</p>
-                <h2 id="musicQueueTitle">0 tracks</h2>
+          <section class="side-section music-queue-section" aria-label="Queue">
+            <div class="side-section-head">
+              <h2 class="side-label">Queue</h2>
+              <div class="queue-summary">
+                <span id="musicQueueTitle">0 tracks</span>
+                <span id="musicQuotaBadge">0 / 5</span>
               </div>
-              <span id="musicQuotaBadge">0 / 5</span>
             </div>
             <div class="music-queue" id="musicQueue"></div>
           </section>
@@ -152,10 +149,7 @@
 
         <aside class="side-panel chat-panel" aria-label="Chat panel">
           <div class="side-panel-head">
-            <div>
-              <p class="section-kicker">Room</p>
-              <h2>Chat</h2>
-            </div>
+            <h2 class="side-title">Chat</h2>
           </div>
           <div class="chat-list" id="chatList"></div>
           <form class="chat-form" id="chatForm">

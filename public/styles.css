@@ -322,7 +322,11 @@ input[readonly] {
   height: 100%;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
-  gap: 14px;
+  gap: 12px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: color-mix(in oklch, var(--surface) 94%, var(--bg));
   overflow: hidden;
 }
 
@@ -336,23 +340,63 @@ input[readonly] {
 
 .side-panel-head {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
 }
 
 .side-section {
   display: grid;
+  gap: 8px;
+  min-height: 0;
+}
+
+.side-section + .side-section {
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.side-title,
+.side-label {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.side-section-head,
+.queue-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 10px;
 }
 
-.music-panel .side-section:last-child {
-  min-height: 0;
+.music-now-section h2 {
+  font-size: 1.04rem;
+  line-height: 1.35;
+}
+
+.music-search-section {
+  grid-template-rows: auto auto minmax(0, 1fr);
+}
+
+.music-queue-section {
   grid-template-rows: auto minmax(0, 1fr);
 }
 
-.music-panel .side-section {
-  min-height: 0;
+.queue-summary {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 640;
+}
+
+#musicResumeButton {
+  justify-self: start;
 }
 
 #focusCanvas {
@@ -537,8 +581,7 @@ input[readonly] {
   gap: 12px;
 }
 
-#participantCount,
-#musicQuotaBadge {
+#participantCount {
   min-width: 34px;
   padding: 4px 10px;
   border: 1px solid var(--line);
@@ -549,18 +592,22 @@ input[readonly] {
   text-align: center;
 }
 
+#musicQuotaBadge {
+  color: var(--muted);
+}
+
 .participant-list,
-.history-list,
-.chat-list,
-.music-results,
-.music-queue {
+.history-list {
   gap: 8px;
 }
 
-.participant-card,
-.chat-item,
-.music-result,
-.queue-item {
+.chat-list,
+.music-results,
+.music-queue {
+  gap: 0;
+}
+
+.participant-card {
   display: grid;
   gap: 8px;
   padding: 12px;
@@ -619,14 +666,15 @@ input[readonly] {
 .chat-list {
   min-height: 0;
   height: 100%;
-  padding-right: 2px;
+  padding-right: 4px;
   overflow: auto;
+  scroll-behavior: smooth;
 }
 
 .music-results,
 .music-queue {
   min-height: 0;
-  padding-right: 2px;
+  padding-right: 4px;
 }
 
 .music-results {
@@ -639,12 +687,47 @@ input[readonly] {
 }
 
 .chat-item {
-  grid-template-columns: 1fr;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+  align-items: start;
 }
 
-.music-results:empty::before,
-.music-queue:empty::before,
+.chat-item:last-child,
+.music-result:last-child,
+.queue-item:last-child {
+  border-bottom: 0;
+}
+
+.chat-main {
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: baseline;
+}
+
+.chat-text {
+  min-width: 0;
+  color: var(--ink);
+  font-size: 0.9rem;
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+.music-results:empty::before {
+  content: "";
+}
+
 .chat-list:empty::before {
+  content: "Nothing here yet.";
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
+.music-queue:empty::before {
   content: "Nothing here yet.";
   color: var(--muted);
   font-size: 0.86rem;
@@ -652,14 +735,19 @@ input[readonly] {
 
 .music-result,
 .queue-item {
-  grid-template-columns: 64px 1fr auto;
+  display: grid;
+  grid-template-columns: 56px 1fr auto;
   align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
 }
 
 .music-thumb {
-  width: 64px;
-  height: 48px;
-  border-radius: 8px;
+  width: 56px;
+  height: 42px;
+  border-radius: 7px;
   background: var(--line);
   object-fit: cover;
 }
@@ -673,6 +761,11 @@ input[readonly] {
 .music-search-form button,
 .chat-form button {
   flex: 0 0 auto;
+}
+
+.chat-meta {
+  padding-top: 2px;
+  white-space: nowrap;
 }
 
 #youtubePlayerHost {

@@ -776,13 +776,10 @@ function setMusicMuted(muted) {
   state.musicMuted = muted;
   state.musicMuteTime = muted ? performance.now() : 0;
   localStorage.setItem(STORAGE_KEYS.muted, muted ? "1" : "0");
-  const iframe = elements.youtubePlayerHost.querySelector("iframe");
-  if (iframe) {
-    iframe.contentWindow.postMessage(JSON.stringify({
-      event: "command",
-      func: muted ? "mute" : "unMute",
-      args: []
-    }), "*");
+  if (postMusicCommand(muted ? "mute" : "unMute")) {
+    if (!muted) {
+      scheduleMusicKeepAlive({ unmute: true, attempts: 3, initialDelay: 80 });
+    }
   }
   elements.musicMuteButton.textContent = muted ? "Unmute" : "Mute";
 }
@@ -828,8 +825,49 @@ function updateUrl(room = "") {
   window.history.replaceState(null, "", next);
 }
 
-/* Tracks whether the user has gestured in this tab session (resets on refresh) */
-let audioInitializedInTab = false;
+/* Tracks whether the user has unlocked media in this tab session. */
+let audioInitializedInTab = state.audioUnlocked;
+let musicKeepAliveScheduledAt = 0;
+let lastMusicKeepAliveAt = 0;
+
+function getMusicIframe() {
+  return elements.youtubePlayerHost.querySelector("iframe");
+}
+
+function postMusicCommand(func, args = []) {
+  const iframe = getMusicIframe();
+  if (!iframe?.contentWindow) {
+    return false;
+  }
+  iframe.contentWindow.postMessage(JSON.stringify({
+    event: "command",
+    func,
+    args
+  }), "*");
+  return true;
+}
+
+function scheduleMusicKeepAlive({ unmute = false, attempts = 4, initialDelay = 160 } = {}) {
+  if (state.session !== "multi" || !state.music.current) {
+    return;
+  }
+  lastMusicKeepAliveAt = performance.now();
+  const keepAliveStamp = ++musicKeepAliveScheduledAt;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    window.setTimeout(() => {
+      if (keepAliveStamp !== musicKeepAliveScheduledAt) {
+        return;
+      }
+      if (state.session !== "multi" || !state.music.current) {
+        return;
+      }
+      postMusicCommand("playVideo");
+      if (unmute && !state.musicMuted) {
+        postMusicCommand("unMute");
+      }
+    }, initialDelay + attempt * 650);
+  }
+}
 
 function playBell() {
   if (!audioInitializedInTab) return;
@@ -868,8 +906,24 @@ function setAudioUnlocked() {
   }
 }
 
+function unlockAudioPlayback() {
+  if (!audioInitializedInTab) {
+    audioInitializedInTab = true;
+    state.audioUnlocked = true;
+    sessionStorage.setItem("pmdr.audioUnlocked", "1");
+  }
+  if (state.session !== "multi" || !state.music.current) {
+    return;
+  }
+  if (!getMusicIframe()) {
+    syncMusicPlayer(true);
+  }
+  scheduleMusicKeepAlive({ unmute: !state.musicMuted, attempts: 5, initialDelay: 80 });
+}
+
 function clearMusicPlayer() {
   state.playerKey = "";
+  musicKeepAliveScheduledAt += 1;
   elements.youtubePlayerHost.innerHTML = "";
 }
 
@@ -885,23 +939,31 @@ function syncMusicPlayer(force = false) {
     return;
   }
 
-  const startSeconds = Math.max(0, Math.floor((Date.now() + state.serverOffset - current.startedAt) / 1000));
-  /* Start muted on fresh page loads — browsers always allow muted autoplay.
-     setAudioUnlocked() will unMute via postMessage on first gesture (no recreation). */
-  const muteParam = (state.musicMuted || !audioInitializedInTab) ? "&mute=1" : "";
-  elements.youtubePlayerHost.innerHTML = `
-    <iframe
-      width="1"
-      height="1"
-      src="https://www.youtube.com/embed/${encodeURIComponent(current.videoId)}?autoplay=1&controls=0&start=${startSeconds}&playsinline=1&modestbranding=1&rel=0&enablejsapi=1${muteParam}"
-      title="Background music"
-      frameborder="0"
-      allow="autoplay; encrypted-media"
-      referrerpolicy="strict-origin-when-cross-origin"
-      allowfullscreen
-    ></iframe>
-  `;
+  const resumeAtSeconds = Math.max(0, Math.floor((Date.now() + state.serverOffset - current.startedAt) / 1000));
+  const iframe = document.createElement("iframe");
+  iframe.width = "200";
+  iframe.height = "113";
+  iframe.src = `https://www.youtube.com/embed/${encodeURIComponent(current.videoId)}?autoplay=1&controls=0&start=${resumeAtSeconds}&playsinline=1&modestbranding=1&rel=0&enablejsapi=1&origin=${encodeURIComponent(window.location.origin)}&mute=1`;
+  iframe.title = "Background music";
+  iframe.frameBorder = "0";
+  iframe.allow = "autoplay; encrypted-media; picture-in-picture";
+  iframe.referrerPolicy = "strict-origin-when-cross-origin";
+  iframe.allowFullscreen = true;
+  iframe.addEventListener("load", () => {
+    scheduleMusicKeepAlive({
+      unmute: audioInitializedInTab && !state.musicMuted,
+      attempts: 5,
+      initialDelay: 240
+    });
+  });
+  elements.youtubePlayerHost.replaceChildren(iframe);
   state.playerKey = key;
+  scheduleMusicKeepAlive({
+    unmute: audioInitializedInTab && !state.musicMuted,
+    attempts: 4,
+    initialDelay: 520
+  });
+  return;
 }
 
 function canControlTimer() {
@@ -1942,8 +2004,35 @@ function bindEvents() {
     send({ type: "music", action: "skip" });
   });
 
-  window.addEventListener("pointerdown", setAudioUnlocked, { passive: true });
-  window.addEventListener("keydown", setAudioUnlocked);
+  window.addEventListener("pointerdown", unlockAudioPlayback, { passive: true });
+  window.addEventListener("touchstart", unlockAudioPlayback, { passive: true });
+  window.addEventListener("touchend", unlockAudioPlayback, { passive: true });
+  window.addEventListener("click", unlockAudioPlayback, { passive: true });
+  window.addEventListener("keydown", unlockAudioPlayback);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible" && state.music.current) {
+      if (!getMusicIframe()) {
+        syncMusicPlayer(true);
+      }
+      scheduleMusicKeepAlive({
+        unmute: audioInitializedInTab && !state.musicMuted,
+        attempts: 4,
+        initialDelay: 60
+      });
+    }
+  });
+  window.addEventListener("pageshow", () => {
+    if (state.music.current) {
+      if (!getMusicIframe()) {
+        syncMusicPlayer(true);
+      }
+      scheduleMusicKeepAlive({
+        unmute: audioInitializedInTab && !state.musicMuted,
+        attempts: 4,
+        initialDelay: 60
+      });
+    }
+  });
   window.addEventListener("resize", scheduleResize);
 }
 
@@ -1972,6 +2061,16 @@ function tick() {
 
     const progress = getProgress();
     const waveActive = Boolean(state.music.current);
+    if (waveActive && !getMusicIframe()) {
+      syncMusicPlayer(true);
+    }
+    if (waveActive && performance.now() - lastMusicKeepAliveAt > 2500) {
+      scheduleMusicKeepAlive({
+        unmute: audioInitializedInTab && !state.musicMuted,
+        attempts: 1,
+        initialDelay: 0
+      });
+    }
     if (waveActive || Math.abs(progress - lastRenderedProgress) > 0.0002) {
       lastRenderedProgress = progress;
       drawTimer(progress, waveActive ? performance.now() : 0);

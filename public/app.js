@@ -410,6 +410,7 @@ const elements = {
   musicSearchInput: document.querySelector("#musicSearchInput"),
   musicMessage: document.querySelector("#musicMessage"),
   musicResults: document.querySelector("#musicResults"),
+  musicTimeline: document.querySelector("#musicTimeline"),
   musicQueue: document.querySelector("#musicQueue"),
   musicQueueTitle: document.querySelector("#musicQueueTitle"),
   musicQuotaBadge: document.querySelector("#musicQuotaBadge"),
@@ -1116,6 +1117,25 @@ function renderMusic() {
   elements.musicSkipButton.hidden = !(state.session === "multi" && state.isHost && current);
   if (state.session !== "multi" && !elements.musicMessage.textContent) {
     setMusicMessage("Music queue opens in multi rooms.");
+  }
+
+  elements.musicTimeline.innerHTML = "";
+  const timelineItems = [];
+  if (current) timelineItems.push({ ...current, isCurrent: true });
+  timelineItems.push(...state.music.queue.slice(0, 3));
+  for (const track of timelineItems) {
+    const li = document.createElement("li");
+    li.className = `timeline-item${track.isCurrent ? " is-current" : ""}`;
+    li.innerHTML = `<span class="timeline-dot"></span><span class="timeline-label"></span>`;
+    li.querySelector(".timeline-label").textContent = track.title;
+    elements.musicTimeline.append(li);
+  }
+  if (state.music.queue.length > 3) {
+    const more = document.createElement("li");
+    more.className = "timeline-item timeline-more";
+    more.innerHTML = `<span class="timeline-dot"></span><span class="timeline-label"></span>`;
+    more.querySelector(".timeline-label").textContent = `+${state.music.queue.length - 3} more`;
+    elements.musicTimeline.append(more);
   }
 
   elements.musicResults.innerHTML = "";

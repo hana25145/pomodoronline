@@ -851,6 +851,69 @@ input::placeholder { color: var(--subtle); }
   color: var(--ink);
 }
 
+.music-timeline {
+  list-style: none;
+  padding: 0;
+  margin: 4px 0 0;
+  display: grid;
+  gap: 0;
+}
+
+.timeline-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  position: relative;
+  padding: 5px 0;
+}
+
+.timeline-item:not(:last-child)::before {
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: 16px;
+  bottom: -5px;
+  width: 1px;
+  background: var(--line);
+}
+
+.timeline-dot {
+  flex-shrink: 0;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--muted);
+  border: 2px solid var(--surface-mid);
+  margin-top: 3px;
+}
+
+.timeline-item.is-current .timeline-dot {
+  background: var(--accent, tomato);
+  border-color: var(--surface);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent, tomato) 30%, transparent);
+}
+
+.timeline-label {
+  font-size: 0.78rem;
+  line-height: 1.35;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+}
+
+.timeline-item.is-current .timeline-label {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.timeline-more .timeline-label {
+  font-style: italic;
+}
+
+.music-timeline:empty { display: none; }
+
 .music-search-section {
   grid-template-rows: auto auto minmax(0, 1fr);
 }

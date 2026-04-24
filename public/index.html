@@ -101,7 +101,20 @@
         </div>
       </header>
 
-      <div class="participants-row multi-only" id="participantsBar"></div>
+      <section class="presence-strip multi-only" aria-label="Room presence">
+        <form class="status-composer" id="statusForm">
+          <input
+            id="statusInput"
+            maxlength="60"
+            autocomplete="off"
+            placeholder="What are you doing right now?"
+            aria-label="What you are doing right now"
+          />
+          <button id="statusSubmitButton" class="icon-button" type="submit">Update</button>
+          <p class="status-lock" id="statusLockText"></p>
+        </form>
+        <div class="participants-row" id="participantsBar"></div>
+      </section>
 
 <section class="workspace-shell" id="workspaceShell">
         <aside class="side-panel music-panel" id="musicPanel" aria-label="Music panel">

@@ -16,6 +16,7 @@ const PORT = Number(process.env.PORT || 5173);
 const MAX_CHAT_MESSAGES = 80;
 const MAX_HISTORY_ITEMS = 10;
 const MAX_QUEUE_PER_USER = 5;
+const STATUS_UPDATE_COOLDOWN = 10 * 60 * 1000;
 
 const MIME_TYPES = {
   ".html": "text/html; charset=utf-8",
@@ -88,6 +89,20 @@ function normalizeDisplayName(value, fallback = "Guest") {
   return cleaned || fallback;
 }
 
+function normalizeStatusText(value) {
+  return String(value || "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .slice(0, 60);
+}
+
+function formatCooldown(milliseconds) {
+  const totalSeconds = Math.ceil(Math.max(0, milliseconds) / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
 function parseInitialDurations(searchParams) {
   const durations = { ...DEFAULT_DURATIONS };
 
@@ -133,6 +148,7 @@ function createRoom(roomId, durations = DEFAULT_DURATIONS) {
     music: createMusicState(),
     hostId: null,
     participants: new Map(),
+    presence: new Map(),
     clients: new Set(),
     history: [],
     messages: [],
@@ -311,7 +327,9 @@ function snapshot(room, client = null) {
     viewer: client
       ? {
           username: client.user.username,
-          name: client.participant.name
+          name: client.participant.name,
+          statusText: client.participant.statusText || "",
+          statusCooldownUntil: client.participant.statusCooldownUntil || 0
         }
       : null,
     serverNow: now,
@@ -327,14 +345,44 @@ function snapshot(room, client = null) {
       current: room.music.current,
       queue: room.music.queue,
       maxPerUser: MAX_QUEUE_PER_USER
-    },
-    todos: [...room.todos.values()].map((entry) => ({
-      username: entry.username,
-      name: entry.name,
-      color: entry.color,
-      tasks: entry.tasks
-    }))
+    }
   };
+}
+
+function handleStatusMessage(client, message) {
+  const room = client.room;
+  const nextStatus = normalizeStatusText(message.text);
+  if (!nextStatus) {
+    sendToClient(client, { type: "notice", level: "error", text: "Status cannot be empty." });
+    return false;
+  }
+
+  if (nextStatus === (client.participant.statusText || "")) {
+    return false;
+  }
+
+  const now = Date.now();
+  const cooldownUntil = client.participant.statusCooldownUntil || 0;
+  if (cooldownUntil > now) {
+    sendToClient(client, {
+      type: "notice",
+      level: "error",
+      text: `You can update your status again in ${formatCooldown(cooldownUntil - now)}.`
+    });
+    return false;
+  }
+
+  client.participant.statusText = nextStatus;
+  client.participant.statusUpdatedAt = now;
+  client.participant.statusCooldownUntil = now + STATUS_UPDATE_COOLDOWN;
+  client.participant.lastSeen = now;
+  room.participants.set(client.id, client.participant);
+  room.presence.set(client.user.username, {
+    statusText: client.participant.statusText,
+    statusUpdatedAt: client.participant.statusUpdatedAt,
+    statusCooldownUntil: client.participant.statusCooldownUntil
+  });
+  return true;
 }
 
 function handleTodoMessage(client, message) {
@@ -656,11 +704,6 @@ function handleClientMessage(client, rawMessage) {
     client.participant.isHost = client.isHost;
     client.participant.lastSeen = Date.now();
     room.participants.set(client.id, client.participant);
-    if (room.todos.has(client.user.username)) {
-      const todoEntry = room.todos.get(client.user.username);
-      todoEntry.name = client.participant.name;
-      todoEntry.color = client.participant.color;
-    }
     broadcast(room);
     return;
   }
@@ -672,8 +715,8 @@ function handleClientMessage(client, rawMessage) {
     changed = handleChatMessage(client, message);
   } else if (message.type === "music") {
     changed = handleMusicMessage(client, message);
-  } else if (message.type === "todo") {
-    changed = handleTodoMessage(client, message);
+  } else if (message.type === "status") {
+    changed = handleStatusMessage(client, message);
   }
 
   if (changed) {
@@ -1104,11 +1147,15 @@ function handleUpgrade(request, socket) {
   ].join("\r\n"));
 
   const id = crypto.randomUUID();
+  const savedPresence = room.presence.get(user.username) || {};
   const participant = {
     id,
     username: user.username,
     name,
     color: url.searchParams.get("color") || "tomato",
+    statusText: savedPresence.statusText || "",
+    statusUpdatedAt: savedPresence.statusUpdatedAt || 0,
+    statusCooldownUntil: savedPresence.statusCooldownUntil || 0,
     isHost: false,
     joinedAt: Date.now(),
     lastSeen: Date.now()
@@ -1127,13 +1174,11 @@ function handleUpgrade(request, socket) {
   sockets.set(socket, client);
   room.clients.add(client);
   room.participants.set(id, participant);
-  if (!room.todos.has(user.username)) {
-    room.todos.set(user.username, { username: user.username, name: participant.name, color: participant.color, tasks: [] });
-  } else {
-    const todoEntry = room.todos.get(user.username);
-    todoEntry.name = participant.name;
-    todoEntry.color = participant.color;
-  }
+  room.presence.set(user.username, {
+    statusText: participant.statusText,
+    statusUpdatedAt: participant.statusUpdatedAt,
+    statusCooldownUntil: participant.statusCooldownUntil
+  });
   addHistory(room, name, "joined the room");
   assignHostIfNeeded(room);
 

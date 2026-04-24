@@ -166,6 +166,17 @@
           </form>
         </aside>
       </section>
+
+      <section class="bottom-panel" id="todoPanel" aria-label="Todo panel">
+        <button class="bottom-panel-tab" id="todoPanelTab" type="button" aria-expanded="false" aria-controls="todoPanelBody">
+          <span class="bottom-tab-label">Todo</span>
+          <span class="bottom-tab-count" id="todoPanelCount" aria-label="pending tasks"></span>
+          <span class="bottom-tab-chevron" aria-hidden="true">▲</span>
+        </button>
+        <div class="bottom-panel-body" id="todoPanelBody">
+          <div class="todo-lists" id="todoLists"></div>
+        </div>
+      </section>
     </main>
 
     <dialog class="settings-dialog" id="settingsDialog" aria-labelledby="settingsTitle">

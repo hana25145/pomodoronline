@@ -135,7 +135,8 @@ function createRoom(roomId, durations = DEFAULT_DURATIONS) {
     participants: new Map(),
     clients: new Set(),
     history: [],
-    messages: []
+    messages: [],
+    todos: new Map()
   };
   rooms.set(roomId, room);
   return room;
@@ -253,9 +254,7 @@ function transitionTimer(room) {
     setTimerMode(timer, "focus", "Timer");
   }
 
-  timer.status = "running";
-  timer.startedAt = Date.now();
-  addHistory(room, "Timer", timer.mode === "focus" ? `Cycle ${timer.cycle} focus started` : `${timer.mode === "long" ? "Long" : "Short"} break started`);
+  addHistory(room, "Timer", timer.mode === "focus" ? `Cycle ${timer.cycle} focus ready` : `${timer.mode === "long" ? "Long" : "Short"} break ready`);
 }
 
 function addHistory(room, by, text) {
@@ -328,8 +327,61 @@ function snapshot(room, client = null) {
       current: room.music.current,
       queue: room.music.queue,
       maxPerUser: MAX_QUEUE_PER_USER
-    }
+    },
+    todos: [...room.todos.values()].map((entry) => ({
+      username: entry.username,
+      name: entry.name,
+      color: entry.color,
+      tasks: entry.tasks
+    }))
   };
+}
+
+function handleTodoMessage(client, message) {
+  const room = client.room;
+  const username = client.user.username;
+
+  if (!room.todos.has(username)) {
+    room.todos.set(username, { username, name: client.participant.name, color: client.participant.color, tasks: [] });
+  }
+  const entry = room.todos.get(username);
+
+  switch (message.action) {
+    case "add": {
+      const text = String(message.text || "").trim().slice(0, 200);
+      if (!text) return false;
+      entry.tasks.push({ id: crypto.randomUUID(), text, done: false, forSession: false, createdAt: Date.now() });
+      return true;
+    }
+    case "edit": {
+      const task = entry.tasks.find((t) => t.id === message.id);
+      if (!task) return false;
+      const text = String(message.text || "").trim().slice(0, 200);
+      if (!text) return false;
+      task.text = text;
+      return true;
+    }
+    case "delete": {
+      const idx = entry.tasks.findIndex((t) => t.id === message.id);
+      if (idx === -1) return false;
+      entry.tasks.splice(idx, 1);
+      return true;
+    }
+    case "toggle": {
+      const task = entry.tasks.find((t) => t.id === message.id);
+      if (!task) return false;
+      task.done = !task.done;
+      return true;
+    }
+    case "session": {
+      const task = entry.tasks.find((t) => t.id === message.id);
+      if (!task) return false;
+      task.forSession = !task.forSession;
+      return true;
+    }
+    default:
+      return false;
+  }
 }
 
 function sendFrame(socket, data) {
@@ -604,6 +656,11 @@ function handleClientMessage(client, rawMessage) {
     client.participant.isHost = client.isHost;
     client.participant.lastSeen = Date.now();
     room.participants.set(client.id, client.participant);
+    if (room.todos.has(client.user.username)) {
+      const todoEntry = room.todos.get(client.user.username);
+      todoEntry.name = client.participant.name;
+      todoEntry.color = client.participant.color;
+    }
     broadcast(room);
     return;
   }
@@ -615,6 +672,8 @@ function handleClientMessage(client, rawMessage) {
     changed = handleChatMessage(client, message);
   } else if (message.type === "music") {
     changed = handleMusicMessage(client, message);
+  } else if (message.type === "todo") {
+    changed = handleTodoMessage(client, message);
   }
 
   if (changed) {
@@ -1068,6 +1127,13 @@ function handleUpgrade(request, socket) {
   sockets.set(socket, client);
   room.clients.add(client);
   room.participants.set(id, participant);
+  if (!room.todos.has(user.username)) {
+    room.todos.set(user.username, { username: user.username, name: participant.name, color: participant.color, tasks: [] });
+  } else {
+    const todoEntry = room.todos.get(user.username);
+    todoEntry.name = participant.name;
+    todoEntry.color = participant.color;
+  }
   addHistory(room, name, "joined the room");
   assignHostIfNeeded(room);
 

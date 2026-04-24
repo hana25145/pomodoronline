@@ -23,7 +23,8 @@ const STORAGE_KEYS = {
   displayName: "pmdr.displayName",
   color: "pmdr.color",
   theme: "pmdr.theme",
-  muted: "pmdr.muted"
+  muted: "pmdr.muted",
+  soloTasks: "pmdr.soloTasks"
 };
 
 const THEMES = {
@@ -302,12 +303,15 @@ const state = {
   musicPanelOpen: true,
   chatPanelOpen: true,
   musicMuted: localStorage.getItem(STORAGE_KEYS.muted) === "1",
+  musicMuteTime: 0,
   reconnectTimer: null,
   copiedUntil: 0,
   noticeText: "",
   noticeUntil: 0,
   playerKey: "",
-  audioUnlocked: sessionStorage.getItem("pmdr.audioUnlocked") === "1"
+  audioUnlocked: sessionStorage.getItem("pmdr.audioUnlocked") === "1",
+  todos: [],
+  todoPanelOpen: false
 };
 
 const elements = {
@@ -387,7 +391,12 @@ const elements = {
   musicSearchSubmitButton: document.querySelector("#musicSearchForm button[type='submit']"),
   chatSubmitButton: document.querySelector("#chatForm button[type='submit']"),
   youtubePlayerHost: document.querySelector("#youtubePlayerHost"),
-  canvas: document.querySelector("#focusCanvas")
+  canvas: document.querySelector("#focusCanvas"),
+  todoPanel: document.querySelector("#todoPanel"),
+  todoPanelTab: document.querySelector("#todoPanelTab"),
+  todoPanelBody: document.querySelector("#todoPanelBody"),
+  todoLists: document.querySelector("#todoLists"),
+  todoPanelCount: document.querySelector("#todoPanelCount")
 };
 
 const context = elements.canvas.getContext("2d");
@@ -690,11 +699,17 @@ function drawTimer(progress, t = 0) {
 
   context.clearRect(0, 0, width, height);
 
-  /* Ambient wave rings — shown when music is playing */
+  /* Ambient wave rings — shown when music is playing and not muted.
+     On mute, each ring finishes its current cycle before disappearing. */
   if (t > 0 && state.music.current) {
     context.save();
     context.translate(cx, cy);
     for (let i = 0; i < 4; i++) {
+      if (state.musicMuted && state.musicMuteTime > 0) {
+        const phaseAtMute = ((state.musicMuteTime / 2600) + i * 0.25) % 1;
+        const ringDoneAt = state.musicMuteTime + (1 - phaseAtMute) * 2600;
+        if (t >= ringDoneAt) continue;
+      }
       const phase = ((t / 2600) + i * 0.25) % 1;
       const ringRadius = radius + 8 + i * 20 + phase * 16;
       const alpha = (1 - phase) * 0.18;
@@ -734,6 +749,7 @@ function drawTimer(progress, t = 0) {
 
 function setMusicMuted(muted) {
   state.musicMuted = muted;
+  state.musicMuteTime = muted ? performance.now() : 0;
   localStorage.setItem(STORAGE_KEYS.muted, muted ? "1" : "0");
   const iframe = elements.youtubePlayerHost.querySelector("iframe");
   if (iframe) {
@@ -1107,12 +1123,14 @@ function applySnapshot(payload) {
   lastKnownMode = state.timer.mode;
   if (prevMode !== null && prevMode !== state.timer.mode) playBell();
 
+  state.todos = payload.todos || [];
   updateControls();
   applyTimerToUI();
   renderParticipants();
   renderHistory();
   renderChat();
   renderMusic();
+  renderTodos();
   syncMusicPlayer();
 }
 
@@ -1287,6 +1305,13 @@ function startSolo() {
   state.chat = [];
   state.music = { current: null, queue: [], maxPerUser: 5 };
   state.musicResults = [];
+  const savedTasks = JSON.parse(localStorage.getItem(STORAGE_KEYS.soloTasks) || "[]");
+  state.todos = [{
+    username: state.user?.username || "me",
+    name: state.name,
+    color: state.color,
+    tasks: savedTasks
+  }];
   setMusicMessage("");
   updateUrl();
   showTimerApp();
@@ -1296,6 +1321,7 @@ function startSolo() {
   renderHistory();
   renderChat();
   renderMusic();
+  renderTodos();
 }
 
 async function joinRoom(room) {
@@ -1325,6 +1351,7 @@ function startMulti(room, setup = null) {
   state.chat = [];
   state.music = { current: null, queue: [], maxPerUser: 5 };
   state.musicResults = [];
+  state.todos = [];
   setMusicMessage("");
   elements.roomCodeButton.textContent = nextRoom;
   elements.roomCodeButton.hidden = false;
@@ -1336,6 +1363,7 @@ function startMulti(room, setup = null) {
   renderHistory();
   renderChat();
   renderMusic();
+  renderTodos();
   connect();
 }
 
@@ -1354,6 +1382,7 @@ function goHome() {
   state.chat = [];
   state.music = { current: null, queue: [], maxPerUser: 5 };
   state.musicResults = [];
+  state.todos = [];
   setMusicMessage("");
   updateUrl();
   showModePanel();
@@ -1474,6 +1503,279 @@ function setPanelOpen(panel, open) {
   }
 }
 
+function setTodoPanelOpen(open) {
+  state.todoPanelOpen = open;
+  elements.todoPanel.classList.toggle("is-open", open);
+  elements.todoPanelTab.setAttribute("aria-expanded", String(open));
+}
+
+function createTodoItem(task, isMe) {
+  const item = document.createElement("div");
+  item.className = [
+    "todo-item",
+    task.forSession ? "is-for-session" : "",
+    task.done ? "is-done" : ""
+  ].filter(Boolean).join(" ");
+
+  const checkbox = document.createElement("button");
+  checkbox.type = "button";
+  checkbox.className = `todo-check${task.done ? " is-checked" : ""}`;
+  checkbox.setAttribute("aria-label", task.done ? "Mark incomplete" : "Mark complete");
+  checkbox.textContent = task.done ? "✓" : "";
+  if (isMe) {
+    checkbox.addEventListener("click", () => {
+      if (state.session === "multi") {
+        send({ type: "todo", action: "toggle", id: task.id });
+      } else {
+        handleSoloTodo("toggle", { id: task.id });
+      }
+    });
+  } else {
+    checkbox.disabled = true;
+  }
+
+  const textEl = document.createElement("span");
+  textEl.className = `todo-item-text${task.done ? " is-done" : ""}${isMe ? "" : " is-readonly"}`;
+  textEl.textContent = task.text;
+  textEl.title = task.text;
+
+  if (isMe) {
+    textEl.addEventListener("click", () => {
+      const editInput = document.createElement("input");
+      editInput.className = "todo-edit-input";
+      editInput.value = task.text;
+      editInput.maxLength = 200;
+      textEl.replaceWith(editInput);
+      editInput.focus();
+      editInput.select();
+
+      let saved = false;
+      const save = () => {
+        if (saved) return;
+        saved = true;
+        const newText = editInput.value.trim();
+        if (newText && newText !== task.text) {
+          if (state.session === "multi") {
+            send({ type: "todo", action: "edit", id: task.id, text: newText });
+          } else {
+            handleSoloTodo("edit", { id: task.id, text: newText });
+          }
+        } else {
+          editInput.replaceWith(textEl);
+        }
+      };
+
+      editInput.addEventListener("blur", save);
+      editInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") { e.preventDefault(); editInput.blur(); }
+        if (e.key === "Escape") { saved = true; editInput.replaceWith(textEl); }
+      });
+    });
+  }
+
+  item.append(checkbox, textEl);
+
+  if (isMe) {
+    const actions = document.createElement("div");
+    actions.className = "todo-item-actions";
+
+    const sessionBtn = document.createElement("button");
+    sessionBtn.type = "button";
+    sessionBtn.className = `todo-item-btn${task.forSession ? " is-session" : ""}`;
+    sessionBtn.title = task.forSession ? "Remove from session focus" : "Mark for this session";
+    sessionBtn.textContent = task.forSession ? "★" : "☆";
+    sessionBtn.addEventListener("click", () => {
+      if (state.session === "multi") {
+        send({ type: "todo", action: "session", id: task.id });
+      } else {
+        handleSoloTodo("session", { id: task.id });
+      }
+    });
+
+    const deleteBtn = document.createElement("button");
+    deleteBtn.type = "button";
+    deleteBtn.className = "todo-item-btn";
+    deleteBtn.title = "Delete task";
+    deleteBtn.textContent = "×";
+    deleteBtn.addEventListener("click", () => {
+      if (state.session === "multi") {
+        send({ type: "todo", action: "delete", id: task.id });
+      } else {
+        handleSoloTodo("delete", { id: task.id });
+      }
+    });
+
+    actions.append(sessionBtn, deleteBtn);
+    item.append(actions);
+  }
+
+  return item;
+}
+
+function renderTodos() {
+  elements.todoLists.innerHTML = "";
+  const myUsername = state.user?.username;
+
+  const sorted = [...state.todos].sort((a, b) => {
+    if (a.username === myUsername) return -1;
+    if (b.username === myUsername) return 1;
+    return 0;
+  });
+
+  const myEntry = state.todos.find((e) => e.username === myUsername);
+  const sessionCount = myEntry ? myEntry.tasks.filter((t) => t.forSession && !t.done).length : 0;
+  const pendingCount = myEntry ? myEntry.tasks.filter((t) => !t.done).length : 0;
+  elements.todoPanelCount.textContent = sessionCount > 0
+    ? `${sessionCount} in session`
+    : pendingCount > 0 ? `${pendingCount} pending` : "";
+
+  if (sorted.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "todo-empty-state";
+    empty.textContent = "Add your first task below.";
+    elements.todoLists.append(empty);
+
+    if (state.session !== "multi" || state.user) {
+      elements.todoLists.append(buildAddRow(myUsername));
+    }
+    return;
+  }
+
+  for (const entry of sorted) {
+    const isMe = entry.username === myUsername;
+    const col = document.createElement("div");
+    col.className = "todo-user-col";
+
+    const header = document.createElement("div");
+    header.className = "todo-col-header";
+    const dot = document.createElement("span");
+    dot.className = "todo-col-dot";
+    dot.style.setProperty("--dot-color", COLORS[entry.color] || COLORS.tomato);
+    const nameEl = document.createElement("span");
+    nameEl.className = "todo-col-name";
+    nameEl.textContent = isMe ? `${entry.name} (you)` : entry.name;
+    header.append(dot, nameEl);
+    col.append(header);
+
+    const taskList = document.createElement("div");
+    taskList.className = "todo-tasks";
+    for (const task of entry.tasks) {
+      taskList.append(createTodoItem(task, isMe));
+    }
+    if (entry.tasks.length === 0) {
+      const empty = document.createElement("p");
+      empty.className = "todo-empty";
+      empty.textContent = isMe ? "No tasks yet." : "Nothing here.";
+      taskList.append(empty);
+    }
+    col.append(taskList);
+
+    if (isMe) {
+      col.append(buildAddRow(myUsername));
+    }
+
+    elements.todoLists.append(col);
+  }
+
+  // If user has no entry yet (just joined multi room), show a column for them
+  if (!myEntry && myUsername && state.session === "multi") {
+    const col = document.createElement("div");
+    col.className = "todo-user-col";
+    const header = document.createElement("div");
+    header.className = "todo-col-header";
+    const dot = document.createElement("span");
+    dot.className = "todo-col-dot";
+    dot.style.setProperty("--dot-color", COLORS[state.color] || COLORS.tomato);
+    const nameEl = document.createElement("span");
+    nameEl.className = "todo-col-name";
+    nameEl.textContent = `${state.name} (you)`;
+    header.append(dot, nameEl);
+    const taskList = document.createElement("div");
+    taskList.className = "todo-tasks";
+    const empty = document.createElement("p");
+    empty.className = "todo-empty";
+    empty.textContent = "No tasks yet.";
+    taskList.append(empty);
+    col.append(header, taskList, buildAddRow(myUsername));
+    elements.todoLists.prepend(col);
+  }
+}
+
+function buildAddRow(myUsername) {
+  const addRow = document.createElement("div");
+  addRow.className = "todo-add-row";
+  const input = document.createElement("input");
+  input.className = "todo-add-input";
+  input.placeholder = "Add a task...";
+  input.maxLength = 200;
+  input.autocomplete = "off";
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "todo-add-btn";
+  btn.textContent = "Add";
+
+  const addTask = () => {
+    const text = input.value.trim();
+    if (!text) return;
+    input.value = "";
+    if (state.session === "multi") {
+      send({ type: "todo", action: "add", text });
+    } else {
+      handleSoloTodo("add", { text });
+    }
+    input.focus();
+  };
+
+  btn.addEventListener("click", addTask);
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); addTask(); }
+  });
+
+  addRow.append(input, btn);
+  return addRow;
+}
+
+function handleSoloTodo(action, extra = {}) {
+  if (!state.todos.length) return;
+  const entry = state.todos[0];
+
+  switch (action) {
+    case "add": {
+      const text = String(extra.text || "").trim().slice(0, 200);
+      if (!text) return;
+      entry.tasks.push({ id: randomId(8), text, done: false, forSession: false, createdAt: Date.now() });
+      break;
+    }
+    case "edit": {
+      const task = entry.tasks.find((t) => t.id === extra.id);
+      if (!task) return;
+      const text = String(extra.text || "").trim().slice(0, 200);
+      if (text) task.text = text;
+      break;
+    }
+    case "delete": {
+      const idx = entry.tasks.findIndex((t) => t.id === extra.id);
+      if (idx !== -1) entry.tasks.splice(idx, 1);
+      break;
+    }
+    case "toggle": {
+      const task = entry.tasks.find((t) => t.id === extra.id);
+      if (task) task.done = !task.done;
+      break;
+    }
+    case "session": {
+      const task = entry.tasks.find((t) => t.id === extra.id);
+      if (task) task.forSession = !task.forSession;
+      break;
+    }
+    default:
+      return;
+  }
+
+  localStorage.setItem(STORAGE_KEYS.soloTasks, JSON.stringify(entry.tasks));
+  renderTodos();
+}
+
 function bindDialogBackdrop(dialog, closeFn) {
   dialog.addEventListener("click", (event) => {
     if (event.target === dialog) {
@@ -1552,6 +1854,7 @@ function bindEvents() {
   elements.closeChatButton.addEventListener("click", () => setPanelOpen("chat", false));
   elements.openMusicButton.addEventListener("click", () => setPanelOpen("music", true));
   elements.openChatButton.addEventListener("click", () => setPanelOpen("chat", true));
+  elements.todoPanelTab.addEventListener("click", () => setTodoPanelOpen(!state.todoPanelOpen));
   elements.musicMuteButton.addEventListener("click", () => setMusicMuted(!state.musicMuted));
 
   elements.startPauseButton.addEventListener("click", () => {

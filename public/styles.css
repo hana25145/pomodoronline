@@ -665,85 +665,31 @@ input::placeholder { color: var(--subtle); }
 }
 
 /* Participants row — top of workspace */
-.presence-row {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding-bottom: 10px;
-}
-
-.status-row {
-  flex: 0 1 420px;
-  min-width: min(280px, 100%);
-}
-
-.status-row #statusInput {
-  width: 100%;
-  height: 36px;
-  border-radius: 10px;
-  background: var(--surface);
-  color: var(--muted);
-}
-
-.status-row #statusInput:focus {
-  color: var(--ink);
-}
-
 .participants-row {
-  flex: 1 1 auto;
-  min-width: 0;
   display: flex;
   align-items: center;
   gap: 6px;
   flex-wrap: wrap;
-  padding-bottom: 0;
+  padding-bottom: 10px;
 }
 
 .participant-chip {
-  display: inline-grid;
-  grid-template-columns: 16px minmax(0, 1fr);
-  align-items: start;
-  gap: 8px;
-  min-width: 0;
-  max-width: min(240px, 100%);
-  padding: 6px 10px 6px 6px;
-  border-radius: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px 3px 4px;
+  border-radius: 999px;
   background: var(--surface);
   border: 1px solid var(--line);
   font-size: 0.76rem;
   font-weight: 500;
   color: var(--muted);
+  white-space: nowrap;
 }
 
 .participant-chip.is-host {
   border-color: var(--accent-dim);
   color: var(--ink);
-}
-
-.participant-copy {
-  min-width: 0;
-  display: grid;
-  gap: 2px;
-}
-
-.participant-chip-name {
-  overflow: hidden;
-  color: var(--ink);
-  font-size: 0.76rem;
-  font-weight: 650;
-  line-height: 1.2;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.participant-chip-status {
-  overflow: hidden;
-  color: var(--subtle);
-  font-size: 0.7rem;
-  line-height: 1.2;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .participant-dot {
@@ -1144,15 +1090,6 @@ input::placeholder { color: var(--subtle); }
 
   .topbar { flex-wrap: wrap; gap: 8px; padding-bottom: 12px; }
   .topbar-actions { flex-wrap: wrap; }
-  .presence-row {
-    flex-direction: column;
-    align-items: stretch;
-    padding-bottom: 12px;
-  }
-
-  .status-row {
-    min-width: 0;
-  }
 
   .workspace-shell {
     grid-template-columns: 1fr;

@@ -88,15 +88,6 @@ function normalizeDisplayName(value, fallback = "Guest") {
   return cleaned || fallback;
 }
 
-function normalizeStatus(value, fallback = "") {
-  const cleaned = String(value || "")
-    .trim()
-    .replace(/\s+/g, " ")
-    .slice(0, 60);
-
-  return cleaned || fallback;
-}
-
 function parseInitialDurations(searchParams) {
   const durations = { ...DEFAULT_DURATIONS };
 
@@ -119,7 +110,6 @@ function createTimerState(initialDurations = DEFAULT_DURATIONS) {
     startedAt: null,
     cycle: 1,
     focusSessionsDone: 0,
-    transitionCount: 0,
     lastUpdatedBy: "Studio"
   };
 }
@@ -264,7 +254,6 @@ function transitionTimer(room) {
     setTimerMode(timer, "focus", "Timer");
   }
 
-  timer.transitionCount += 1;
   addHistory(room, "Timer", timer.mode === "focus" ? `Cycle ${timer.cycle} focus ready` : `${timer.mode === "long" ? "Long" : "Short"} break ready`);
 }
 
@@ -664,7 +653,6 @@ function handleClientMessage(client, rawMessage) {
   if (message.type === "hello" || message.type === "rename") {
     client.participant.name = normalizeDisplayName(message.name || client.user.username, client.user.username);
     client.participant.color = String(message.color || client.participant.color).slice(0, 32);
-    client.participant.status = normalizeStatus(message.status || client.participant.status || "");
     client.participant.isHost = client.isHost;
     client.participant.lastSeen = Date.now();
     room.participants.set(client.id, client.participant);
@@ -1121,7 +1109,6 @@ function handleUpgrade(request, socket) {
     username: user.username,
     name,
     color: url.searchParams.get("color") || "tomato",
-    status: normalizeStatus(url.searchParams.get("status") || ""),
     isHost: false,
     joinedAt: Date.now(),
     lastSeen: Date.now()

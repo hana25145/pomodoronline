@@ -22,7 +22,6 @@ const STORAGE_KEYS = {
   authToken: "pmdr.authToken",
   displayName: "pmdr.displayName",
   color: "pmdr.color",
-  status: "pmdr.status",
   theme: "pmdr.theme",
   muted: "pmdr.muted",
   soloTasks: "pmdr.soloTasks"
@@ -293,7 +292,6 @@ const state = {
   isHost: false,
   name: "",
   color: localStorage.getItem(STORAGE_KEYS.color) || "tomato",
-  status: localStorage.getItem(STORAGE_KEYS.status) || "",
   theme: localStorage.getItem(STORAGE_KEYS.theme) || "midnight",
   timer: createTimerState(),
   serverOffset: 0,
@@ -313,8 +311,7 @@ const state = {
   playerKey: "",
   audioUnlocked: sessionStorage.getItem("pmdr.audioUnlocked") === "1",
   todos: [],
-  todoPanelOpen: false,
-  hasReceivedSnapshot: false
+  todoPanelOpen: false
 };
 
 const elements = {
@@ -367,7 +364,6 @@ const elements = {
   settingsLogoutButton: document.querySelector("#settingsLogoutButton"),
   roomCodeButton: document.querySelector("#roomCodeButton"),
   nameInput: document.querySelector("#nameInput"),
-  statusInput: document.querySelector("#statusInput"),
   colorRow: document.querySelector("#colorRow"),
   participantsBar: document.querySelector("#participantsBar"),
   modeButtons: [...document.querySelectorAll("[data-mode]")],
@@ -452,7 +448,6 @@ function createTimerState(initialDurations = DEFAULT_DURATIONS) {
     startedAt: null,
     cycle: 1,
     focusSessionsDone: 0,
-    transitionCount: 0,
     lastUpdatedBy: "You"
   };
 }
@@ -476,15 +471,6 @@ function normalizeName(value, fallback = "") {
     .slice(0, 24);
 
   return cleaned || fallback || "Maker";
-}
-
-function normalizeStatus(value, fallback = "") {
-  const cleaned = String(value || "")
-    .trim()
-    .replace(/\s+/g, " ")
-    .slice(0, 60);
-
-  return cleaned || fallback;
 }
 
 function clampMinutes(value, fallback) {
@@ -664,7 +650,6 @@ function transitionTimer(timer, actor = "Timer") {
     setTimerMode(timer, "focus", actor);
   }
 
-  timer.transitionCount += 1;
   timer.status = "running";
   timer.startedAt = Date.now();
 }
@@ -819,7 +804,7 @@ function updateUrl(room = "") {
 }
 
 /* Tracks whether the user has gestured in this tab session (resets on refresh) */
-let audioInitializedInTab = state.audioUnlocked;
+let audioInitializedInTab = false;
 
 function playBell() {
   if (!audioInitializedInTab) return;
@@ -977,30 +962,17 @@ function renderParticipants() {
   if (state.session !== "multi") return;
 
   for (const participant of state.participants) {
-    const chip = document.createElement("article");
+    const chip = document.createElement("span");
     chip.className = `participant-chip${participant.isHost ? " is-host" : ""}`;
     const dot = document.createElement("span");
     dot.className = "participant-dot";
     dot.style.setProperty("--avatar", COLORS[participant.color] || COLORS.tomato);
-    const copy = document.createElement("span");
-    copy.className = "participant-copy";
     const name = document.createElement("span");
-    name.className = "participant-chip-name";
     const isMe = participant.name === state.name;
     const hostTag = participant.isHost ? " (HOST)" : "";
     const youTag = isMe ? " (YOU)" : "";
     name.textContent = `${participant.name}${hostTag}${youTag}`;
-    copy.append(name);
-
-    const status = normalizeStatus(participant.status || "");
-    if (status) {
-      const note = document.createElement("span");
-      note.className = "participant-chip-status";
-      note.textContent = status;
-      copy.append(note);
-    }
-
-    chip.append(dot, copy);
+    chip.append(dot, name);
     elements.participantsBar.append(chip);
   }
 }
@@ -1127,8 +1099,10 @@ function renderMusic() {
   }
 }
 
+let lastKnownMode = null;
+
 function applySnapshot(payload) {
-  const previousTimer = state.hasReceivedSnapshot ? state.timer : null;
+  const prevMode = lastKnownMode;
   state.serverOffset = payload.serverNow - Date.now();
   state.timer = {
     ...payload.timer,
@@ -1146,6 +1120,9 @@ function applySnapshot(payload) {
     elements.roomCodeButton.hidden = false;
   }
 
+  lastKnownMode = state.timer.mode;
+  if (prevMode !== null && prevMode !== state.timer.mode) playBell();
+
   state.todos = payload.todos || [];
   updateControls();
   applyTimerToUI();
@@ -1155,12 +1132,6 @@ function applySnapshot(payload) {
   renderMusic();
   renderTodos();
   syncMusicPlayer();
-
-  if (previousTimer && (state.timer.transitionCount || 0) > (previousTimer.transitionCount || 0)) {
-    playBell();
-  }
-
-  state.hasReceivedSnapshot = true;
 }
 
 function send(message) {
@@ -1176,8 +1147,7 @@ function sendHello() {
   send({
     type: "hello",
     name: state.name,
-    color: state.color,
-    status: state.status
+    color: state.color
   });
 }
 
@@ -1277,7 +1247,6 @@ function connect() {
     room: state.room,
     name: state.name,
     color: state.color,
-    status: state.status,
     token: state.authToken
   });
 
@@ -1343,7 +1312,6 @@ function startSolo() {
     color: state.color,
     tasks: savedTasks
   }];
-  state.hasReceivedSnapshot = false;
   setMusicMessage("");
   updateUrl();
   showTimerApp();
@@ -1384,7 +1352,6 @@ function startMulti(room, setup = null) {
   state.music = { current: null, queue: [], maxPerUser: 5 };
   state.musicResults = [];
   state.todos = [];
-  state.hasReceivedSnapshot = false;
   setMusicMessage("");
   elements.roomCodeButton.textContent = nextRoom;
   elements.roomCodeButton.hidden = false;
@@ -1416,7 +1383,6 @@ function goHome() {
   state.music = { current: null, queue: [], maxPerUser: 5 };
   state.musicResults = [];
   state.todos = [];
-  state.hasReceivedSnapshot = false;
   setMusicMessage("");
   updateUrl();
   showModePanel();
@@ -1452,9 +1418,7 @@ async function restoreSession() {
     const data = await apiRequest("/api/auth/me", { method: "GET", headers: {} });
     state.user = data.user;
     state.name = normalizeName(localStorage.getItem(STORAGE_KEYS.displayName) || state.user.username, state.user.username);
-    state.status = normalizeStatus(localStorage.getItem(STORAGE_KEYS.status) || "");
     elements.nameInput.value = state.name;
-    elements.statusInput.value = state.status;
     renderViewerBadge();
 
     if (state.pendingRoomFromUrl) {
@@ -1485,9 +1449,7 @@ async function handleAuthSubmit(event) {
     state.user = data.user;
     localStorage.setItem(STORAGE_KEYS.authToken, data.token);
     state.name = normalizeName(localStorage.getItem(STORAGE_KEYS.displayName) || data.user.username, data.user.username);
-    state.status = normalizeStatus(localStorage.getItem(STORAGE_KEYS.status) || "");
     elements.nameInput.value = state.name;
-    elements.statusInput.value = state.status;
     elements.createNameInput.value = state.name;
     elements.authPasswordInput.value = "";
     setAuthMessage("");
@@ -1861,7 +1823,6 @@ function bindEvents() {
     elements.createRoomMessage.textContent = "";
     state.name = normalizeName(elements.createNameInput.value || state.user?.username, state.user?.username || "Maker");
     elements.nameInput.value = state.name;
-    elements.statusInput.value = state.status;
     localStorage.setItem(STORAGE_KEYS.displayName, state.name);
     closeDialog(elements.createRoomDialog);
     startMulti(room, { durations });
@@ -1920,15 +1881,6 @@ function bindEvents() {
     state.name = normalizeName(elements.nameInput.value || state.user?.username, state.user?.username || "Maker");
     elements.nameInput.value = state.name;
     localStorage.setItem(STORAGE_KEYS.displayName, state.name);
-    if (state.session === "multi") {
-      sendHello();
-    }
-  });
-
-  elements.statusInput.addEventListener("change", () => {
-    state.status = normalizeStatus(elements.statusInput.value);
-    elements.statusInput.value = state.status;
-    localStorage.setItem(STORAGE_KEYS.status, state.status);
     if (state.session === "multi") {
       sendHello();
     }
@@ -2010,9 +1962,7 @@ function tick() {
 
 function init() {
   state.name = normalizeName(localStorage.getItem(STORAGE_KEYS.displayName) || "", "Maker");
-  state.status = normalizeStatus(localStorage.getItem(STORAGE_KEYS.status) || "");
   elements.nameInput.value = state.name;
-  elements.statusInput.value = state.status;
   elements.createNameInput.value = state.name;
   applyTheme(state.theme);
   renderColorDots();

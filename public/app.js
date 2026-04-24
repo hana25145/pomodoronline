@@ -21,7 +21,162 @@ const MODE_COPY = {
 const STORAGE_KEYS = {
   authToken: "pmdr.authToken",
   displayName: "pmdr.displayName",
-  color: "pmdr.color"
+  color: "pmdr.color",
+  theme: "pmdr.theme",
+  muted: "pmdr.muted"
+};
+
+const THEMES = {
+  midnight: {
+    label: "Midnight",
+    colorScheme: "dark",
+    swatchBg: "oklch(10% 0.008 55)",
+    swatchAccent: "oklch(72% 0.130 76)",
+    swatchInk: "oklch(72% 0.130 76)",
+    vars: {
+      "--bg":             "oklch(10%  0.008 55)",
+      "--surface":        "oklch(14%  0.012 58)",
+      "--surface-mid":    "oklch(18%  0.016 60)",
+      "--surface-strong": "oklch(23%  0.020 62)",
+      "--ink":            "oklch(93%  0.008 72)",
+      "--muted":          "oklch(42%  0.018 68)",
+      "--subtle":         "oklch(28%  0.015 64)",
+      "--line":           "oklch(22%  0.016 62)",
+      "--accent":         "oklch(72%  0.130 76)",
+      "--accent-dim":     "oklch(58%  0.100 76)",
+      "--accent-soft":    "oklch(18%  0.050 76)",
+      "--accent-ink":     "oklch(10%  0.010 55)",
+      "--ok":             "oklch(62%  0.110 148)",
+      "--focus-ring":     "oklch(72%  0.130 76 / 0.28)",
+      "--ring-track":     "oklch(22%  0.016 62)",
+      "--ring-progress":  "oklch(72%  0.130 76)"
+    }
+  },
+  forest: {
+    label: "Forest",
+    colorScheme: "dark",
+    swatchBg: "oklch(9% 0.015 155)",
+    swatchAccent: "oklch(65% 0.14 148)",
+    swatchInk: "oklch(65% 0.14 148)",
+    vars: {
+      "--bg":             "oklch(9%   0.015 155)",
+      "--surface":        "oklch(13%  0.018 155)",
+      "--surface-mid":    "oklch(17%  0.020 152)",
+      "--surface-strong": "oklch(22%  0.022 150)",
+      "--ink":            "oklch(92%  0.010 120)",
+      "--muted":          "oklch(44%  0.020 145)",
+      "--subtle":         "oklch(27%  0.018 148)",
+      "--line":           "oklch(21%  0.020 150)",
+      "--accent":         "oklch(65%  0.140 148)",
+      "--accent-dim":     "oklch(52%  0.110 148)",
+      "--accent-soft":    "oklch(17%  0.055 148)",
+      "--accent-ink":     "oklch(9%   0.012 155)",
+      "--ok":             "oklch(65%  0.140 148)",
+      "--focus-ring":     "oklch(65%  0.140 148 / 0.28)",
+      "--ring-track":     "oklch(21%  0.020 150)",
+      "--ring-progress":  "oklch(65%  0.140 148)"
+    }
+  },
+  ocean: {
+    label: "Ocean",
+    colorScheme: "dark",
+    swatchBg: "oklch(9% 0.015 240)",
+    swatchAccent: "oklch(65% 0.13 228)",
+    swatchInk: "oklch(65% 0.13 228)",
+    vars: {
+      "--bg":             "oklch(9%   0.015 240)",
+      "--surface":        "oklch(13%  0.018 238)",
+      "--surface-mid":    "oklch(17%  0.020 235)",
+      "--surface-strong": "oklch(22%  0.022 232)",
+      "--ink":            "oklch(92%  0.008 215)",
+      "--muted":          "oklch(44%  0.020 230)",
+      "--subtle":         "oklch(27%  0.018 232)",
+      "--line":           "oklch(21%  0.020 234)",
+      "--accent":         "oklch(65%  0.130 228)",
+      "--accent-dim":     "oklch(52%  0.100 228)",
+      "--accent-soft":    "oklch(17%  0.055 228)",
+      "--accent-ink":     "oklch(9%   0.012 240)",
+      "--ok":             "oklch(62%  0.110 148)",
+      "--focus-ring":     "oklch(65%  0.130 228 / 0.28)",
+      "--ring-track":     "oklch(21%  0.020 234)",
+      "--ring-progress":  "oklch(65%  0.130 228)"
+    }
+  },
+  rose: {
+    label: "Rose",
+    colorScheme: "dark",
+    swatchBg: "oklch(9% 0.012 0)",
+    swatchAccent: "oklch(67% 0.115 10)",
+    swatchInk: "oklch(67% 0.115 10)",
+    vars: {
+      "--bg":             "oklch(9%   0.012 0)",
+      "--surface":        "oklch(13%  0.016 5)",
+      "--surface-mid":    "oklch(17%  0.018 5)",
+      "--surface-strong": "oklch(22%  0.020 8)",
+      "--ink":            "oklch(93%  0.008 20)",
+      "--muted":          "oklch(44%  0.018 10)",
+      "--subtle":         "oklch(27%  0.015 8)",
+      "--line":           "oklch(21%  0.018 6)",
+      "--accent":         "oklch(67%  0.115 10)",
+      "--accent-dim":     "oklch(54%  0.090 10)",
+      "--accent-soft":    "oklch(17%  0.048 8)",
+      "--accent-ink":     "oklch(9%   0.010 0)",
+      "--ok":             "oklch(62%  0.110 148)",
+      "--focus-ring":     "oklch(67%  0.115 10 / 0.28)",
+      "--ring-track":     "oklch(21%  0.018 6)",
+      "--ring-progress":  "oklch(67%  0.115 10)"
+    }
+  },
+  parchment: {
+    label: "Parchment",
+    colorScheme: "light",
+    swatchBg: "oklch(97% 0.006 80)",
+    swatchAccent: "oklch(52% 0.16 36)",
+    swatchInk: "oklch(30% 0.02 55)",
+    vars: {
+      "--bg":             "oklch(97%  0.006 80)",
+      "--surface":        "oklch(94%  0.008 78)",
+      "--surface-mid":    "oklch(90%  0.010 76)",
+      "--surface-strong": "oklch(85%  0.012 74)",
+      "--ink":            "oklch(22%  0.018 56)",
+      "--muted":          "oklch(54%  0.015 60)",
+      "--subtle":         "oklch(72%  0.010 68)",
+      "--line":           "oklch(84%  0.010 72)",
+      "--accent":         "oklch(52%  0.160 36)",
+      "--accent-dim":     "oklch(44%  0.130 36)",
+      "--accent-soft":    "oklch(92%  0.040 60)",
+      "--accent-ink":     "oklch(97%  0.006 80)",
+      "--ok":             "oklch(44%  0.120 148)",
+      "--focus-ring":     "oklch(52%  0.160 36 / 0.22)",
+      "--ring-track":     "oklch(84%  0.010 72)",
+      "--ring-progress":  "oklch(52%  0.160 36)"
+    }
+  },
+  slate: {
+    label: "Slate",
+    colorScheme: "dark",
+    swatchBg: "oklch(9% 0.006 240)",
+    swatchAccent: "oklch(64% 0.09 255)",
+    swatchInk: "oklch(64% 0.09 255)",
+    vars: {
+      "--bg":             "oklch(9%   0.006 240)",
+      "--surface":        "oklch(13%  0.008 238)",
+      "--surface-mid":    "oklch(17%  0.010 235)",
+      "--surface-strong": "oklch(22%  0.012 232)",
+      "--ink":            "oklch(90%  0.006 230)",
+      "--muted":          "oklch(45%  0.012 232)",
+      "--subtle":         "oklch(28%  0.010 234)",
+      "--line":           "oklch(21%  0.012 236)",
+      "--accent":         "oklch(64%  0.090 255)",
+      "--accent-dim":     "oklch(52%  0.070 255)",
+      "--accent-soft":    "oklch(17%  0.040 255)",
+      "--accent-ink":     "oklch(9%   0.006 240)",
+      "--ok":             "oklch(62%  0.110 148)",
+      "--focus-ring":     "oklch(64%  0.090 255 / 0.28)",
+      "--ring-track":     "oklch(21%  0.012 236)",
+      "--ring-progress":  "oklch(64%  0.090 255)"
+    }
+  }
 };
 
 const state = {
@@ -37,6 +192,7 @@ const state = {
   isHost: false,
   name: "",
   color: localStorage.getItem(STORAGE_KEYS.color) || "tomato",
+  theme: localStorage.getItem(STORAGE_KEYS.theme) || "midnight",
   timer: createTimerState(),
   serverOffset: 0,
   participants: [],
@@ -46,6 +202,7 @@ const state = {
   musicResults: [],
   musicPanelOpen: true,
   chatPanelOpen: true,
+  musicMuted: localStorage.getItem(STORAGE_KEYS.muted) === "1",
   reconnectTimer: null,
   copiedUntil: 0,
   noticeText: "",
@@ -67,9 +224,6 @@ const elements = {
   authMessage: document.querySelector("#authMessage"),
   accountBadge: document.querySelector("#accountBadge"),
   entryLogoutButton: document.querySelector("#entryLogoutButton"),
-  soloButton: document.querySelector("#soloButton"),
-  multiButton: document.querySelector("#multiButton"),
-  multiPanel: document.querySelector("#multiPanel"),
   createRoomButton: document.querySelector("#createRoomButton"),
   joinRoomForm: document.querySelector("#joinRoomForm"),
   joinRoomInput: document.querySelector("#joinRoomInput"),
@@ -88,8 +242,9 @@ const elements = {
   chatPanel: document.querySelector("#chatPanel"),
   closeMusicButton: document.querySelector("#closeMusicButton"),
   closeChatButton: document.querySelector("#closeChatButton"),
-  toggleMusicButton: document.querySelector("#toggleMusicButton"),
-  toggleChatButton: document.querySelector("#toggleChatButton"),
+  openMusicButton: document.querySelector("#openMusicButton"),
+  openChatButton: document.querySelector("#openChatButton"),
+  musicMuteButton: document.querySelector("#musicMuteButton"),
   settingsButton: document.querySelector("#settingsButton"),
   homeButton: document.querySelector("#homeButton"),
   modeLabel: document.querySelector("#modeLabel"),
@@ -116,6 +271,7 @@ const elements = {
   focusMinutes: document.querySelector("#focusMinutes"),
   shortMinutes: document.querySelector("#shortMinutes"),
   longMinutes: document.querySelector("#longMinutes"),
+  themeGrid: document.querySelector("#themeGrid"),
   multiOnlySections: [...document.querySelectorAll(".multi-only")],
   hostOnlySections: [...document.querySelectorAll(".host-only")],
   hostOnlyButtons: [...document.querySelectorAll(".host-only-button")],
@@ -146,6 +302,41 @@ function cacheRingColors() {
   const s = getComputedStyle(document.documentElement);
   ringColors.track = s.getPropertyValue("--ring-track").trim();
   ringColors.progress = s.getPropertyValue("--ring-progress").trim();
+}
+
+function applyTheme(themeId) {
+  const theme = THEMES[themeId] || THEMES.midnight;
+  const root = document.documentElement;
+  for (const [prop, value] of Object.entries(theme.vars)) {
+    root.style.setProperty(prop, value);
+  }
+  root.style.colorScheme = theme.colorScheme;
+  state.theme = themeId;
+  localStorage.setItem(STORAGE_KEYS.theme, themeId);
+  cacheRingColors();
+  lastRenderedProgress = -1;
+  if (!elements.timerApp.hidden) drawTimer(getProgress());
+  renderThemes();
+}
+
+function renderThemes() {
+  elements.themeGrid.innerHTML = "";
+  for (const [id, theme] of Object.entries(THEMES)) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `theme-swatch${id === state.theme ? " is-active" : ""}`;
+    button.style.setProperty("--swatch-bg", theme.swatchBg);
+    button.style.setProperty("--swatch-accent", theme.swatchAccent);
+    button.style.setProperty("--swatch-ink", theme.swatchInk);
+    button.setAttribute("aria-label", `${theme.label} theme`);
+    button.setAttribute("title", theme.label);
+    const label = document.createElement("span");
+    label.className = "theme-swatch-label";
+    label.textContent = theme.label;
+    button.append(label);
+    button.addEventListener("click", () => applyTheme(id));
+    elements.themeGrid.append(button);
+  }
 }
 
 function createTimerState(initialDurations = DEFAULT_DURATIONS) {
@@ -304,7 +495,6 @@ function showAuthPanel() {
   elements.authPanel.hidden = false;
   elements.modePanel.hidden = true;
   elements.timerApp.hidden = true;
-  setEntryMode("");
 }
 
 function showModePanel() {
@@ -316,7 +506,6 @@ function showModePanel() {
   elements.authPanel.hidden = true;
   elements.modePanel.hidden = false;
   elements.timerApp.hidden = true;
-  setEntryMode("");
   renderViewerBadge();
 }
 
@@ -324,12 +513,6 @@ function showTimerApp() {
   elements.entryScreen.hidden = true;
   elements.timerApp.hidden = false;
   requestAnimationFrame(resizeCanvas);
-}
-
-function setEntryMode(mode) {
-  elements.soloButton.classList.toggle("is-active", mode === "solo");
-  elements.multiButton.classList.toggle("is-active", mode === "multi");
-  elements.multiPanel.hidden = mode !== "multi";
 }
 
 function openDialog(dialog) {
@@ -426,7 +609,7 @@ function getProgress() {
   return Math.min(1, Math.max(0, 1 - getRemaining() / duration));
 }
 
-function drawTimer(progress) {
+function drawTimer(progress, t = 0) {
   const canvas = elements.canvas;
   const width = canvas.clientWidth;
   const height = canvas.clientHeight;
@@ -435,6 +618,27 @@ function drawTimer(progress) {
   const radius = Math.min(width, height) * 0.40;
 
   context.clearRect(0, 0, width, height);
+
+  /* Ambient wave rings — shown when music is playing */
+  if (t > 0 && state.music.current) {
+    context.save();
+    context.translate(cx, cy);
+    for (let i = 0; i < 4; i++) {
+      const phase = ((t / 2600) + i * 0.25) % 1;
+      const ringRadius = radius + 8 + i * 20 + phase * 16;
+      const alpha = (1 - phase) * 0.18;
+      context.beginPath();
+      context.strokeStyle = ringColors.progress || "oklch(72% 0.13 76)";
+      context.globalAlpha = alpha;
+      context.lineWidth = 1.5;
+      context.arc(0, 0, ringRadius, 0, Math.PI * 2);
+      context.stroke();
+    }
+    context.globalAlpha = 1;
+    context.restore();
+  }
+
+  /* Timer ring */
   context.save();
   context.translate(cx, cy);
   context.rotate(-Math.PI / 2);
@@ -457,6 +661,20 @@ function drawTimer(progress) {
   context.restore();
 }
 
+function setMusicMuted(muted) {
+  state.musicMuted = muted;
+  localStorage.setItem(STORAGE_KEYS.muted, muted ? "1" : "0");
+  const iframe = elements.youtubePlayerHost.querySelector("iframe");
+  if (iframe) {
+    iframe.contentWindow.postMessage(JSON.stringify({
+      event: "command",
+      func: muted ? "mute" : "unMute",
+      args: []
+    }), "*");
+  }
+  elements.musicMuteButton.textContent = muted ? "Unmute" : "Mute";
+}
+
 function resizeCanvas() {
   if (elements.timerApp.hidden) {
     return;
@@ -467,7 +685,7 @@ function resizeCanvas() {
   elements.canvas.height = Math.max(1, Math.floor(rect.height * ratio));
   context.setTransform(ratio, 0, 0, ratio, 0, 0);
   lastRenderedProgress = -1;
-  drawTimer(getProgress());
+  drawTimer(getProgress(), state.music.current ? performance.now() : 0);
 }
 
 let resizeScheduled = null;
@@ -496,17 +714,18 @@ function updateUrl(room = "") {
   window.history.replaceState(null, "", next);
 }
 
+/* Tracks whether the user has gestured in this tab session (resets on refresh) */
+let audioInitializedInTab = false;
+
 function setAudioUnlocked() {
-  if (state.audioUnlocked) {
-    return;
-  }
+  if (audioInitializedInTab) return;
+  audioInitializedInTab = true;
   state.audioUnlocked = true;
   sessionStorage.setItem("pmdr.audioUnlocked", "1");
   if (state.session === "multi" && state.music.current) {
     syncMusicPlayer(true);
-  } else {
-    elements.musicResumeButton.hidden = true;
   }
+  elements.musicResumeButton.hidden = true;
 }
 
 function clearMusicPlayer() {
@@ -528,11 +747,12 @@ function syncMusicPlayer(force = false) {
   }
 
   const startSeconds = Math.max(0, Math.floor((Date.now() + state.serverOffset - current.startedAt) / 1000));
+  const muteParam = state.musicMuted ? "&mute=1" : "";
   elements.youtubePlayerHost.innerHTML = `
     <iframe
       width="1"
       height="1"
-      src="https://www.youtube.com/embed/${encodeURIComponent(current.videoId)}?autoplay=1&controls=0&start=${startSeconds}&playsinline=1&modestbranding=1&rel=0&enablejsapi=1"
+      src="https://www.youtube.com/embed/${encodeURIComponent(current.videoId)}?autoplay=1&controls=0&start=${startSeconds}&playsinline=1&modestbranding=1&rel=0&enablejsapi=1${muteParam}"
       title="Background music"
       frameborder="0"
       allow="autoplay; encrypted-media"
@@ -541,7 +761,7 @@ function syncMusicPlayer(force = false) {
     ></iframe>
   `;
   state.playerKey = key;
-  elements.musicResumeButton.hidden = state.audioUnlocked;
+  elements.musicResumeButton.hidden = audioInitializedInTab;
 }
 
 function canControlTimer() {
@@ -705,7 +925,7 @@ function renderMusic() {
     ? `${countReservedTracksForViewer()} / ${state.music.maxPerUser || 5}`
     : "- / 5";
   elements.musicSkipButton.hidden = !(state.session === "multi" && state.isHost && current);
-  elements.musicResumeButton.hidden = !(state.session === "multi" && current && !state.audioUnlocked);
+  elements.musicResumeButton.hidden = !(state.session === "multi" && current && !audioInitializedInTab);
   if (state.session !== "multi" && !elements.musicMessage.textContent) {
     setMusicMessage("Music queue opens in multi rooms.");
   }
@@ -1140,13 +1360,11 @@ async function handleMusicSearch(event) {
 function setPanelOpen(panel, open) {
   if (panel === "music") {
     state.musicPanelOpen = open;
-    elements.musicPanel.hidden = !open;
-    elements.toggleMusicButton.hidden = open;
+    elements.musicPanel.classList.toggle("panel-closed", !open);
     elements.workspaceShell.classList.toggle("music-closed", !open);
   } else {
     state.chatPanelOpen = open;
-    elements.chatPanel.hidden = !open;
-    elements.toggleChatButton.hidden = open;
+    elements.chatPanel.classList.toggle("panel-closed", !open);
     elements.workspaceShell.classList.toggle("chat-closed", !open);
   }
 }
@@ -1165,15 +1383,6 @@ function bindEvents() {
   elements.signupTabButton.addEventListener("click", () => setAuthMode("signup"));
   elements.authForm.addEventListener("submit", handleAuthSubmit);
   elements.entryLogoutButton.addEventListener("click", logout);
-
-  elements.soloButton.addEventListener("click", () => {
-    setEntryMode("solo");
-    startSolo();
-  });
-
-  elements.multiButton.addEventListener("click", () => {
-    setEntryMode("multi");
-  });
 
   elements.createRoomButton.addEventListener("click", () => {
     prepareCreateRoomDialog();
@@ -1226,8 +1435,9 @@ function bindEvents() {
 
   elements.closeMusicButton.addEventListener("click", () => setPanelOpen("music", false));
   elements.closeChatButton.addEventListener("click", () => setPanelOpen("chat", false));
-  elements.toggleMusicButton.addEventListener("click", () => setPanelOpen("music", true));
-  elements.toggleChatButton.addEventListener("click", () => setPanelOpen("chat", true));
+  elements.openMusicButton.addEventListener("click", () => setPanelOpen("music", true));
+  elements.openChatButton.addEventListener("click", () => setPanelOpen("chat", true));
+  elements.musicMuteButton.addEventListener("click", () => setMusicMuted(!state.musicMuted));
 
   elements.startPauseButton.addEventListener("click", () => {
     sendTimerCommand(state.timer.status === "running" ? "pause" : "start");
@@ -1321,9 +1531,10 @@ function tick() {
     }
 
     const progress = getProgress();
-    if (Math.abs(progress - lastRenderedProgress) > 0.0002) {
+    const waveActive = Boolean(state.music.current);
+    if (waveActive || Math.abs(progress - lastRenderedProgress) > 0.0002) {
       lastRenderedProgress = progress;
-      drawTimer(progress);
+      drawTimer(progress, waveActive ? performance.now() : 0);
     }
 
     if (Date.now() > state.copiedUntil && elements.copyLinkButton.textContent !== "Link") {
@@ -1342,8 +1553,9 @@ function init() {
   state.name = normalizeName(localStorage.getItem(STORAGE_KEYS.displayName) || "", "Maker");
   elements.nameInput.value = state.name;
   elements.createNameInput.value = state.name;
-  cacheRingColors();
+  applyTheme(state.theme);
   renderColorDots();
+  elements.musicMuteButton.textContent = state.musicMuted ? "Unmute" : "Mute";
   bindEvents();
   restoreSession();
   requestAnimationFrame(tick);

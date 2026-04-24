@@ -32,21 +32,15 @@
           <p class="dialog-message" id="authMessage"></p>
         </section>
 
-        <section class="mode-panel" id="modePanel" aria-label="Choose timer mode" hidden>
+        <section class="mode-panel" id="modePanel" aria-label="Enter room" hidden>
           <p class="mode-label" id="accountBadge">Ready</p>
-          <div class="entry-tabs" role="group" aria-label="Timer type">
-            <button id="soloButton" class="entry-button" type="button">SOLO</button>
-            <button id="multiButton" class="entry-button" type="button">MULTI</button>
-          </div>
-          <div class="multi-panel" id="multiPanel" hidden>
-            <button id="createRoomButton" class="create-room-button" type="button">방 만들기</button>
-            <div class="multi-divider">or</div>
-            <form class="join-room-form" id="joinRoomForm">
-              <input id="joinRoomInput" placeholder="Room code" maxlength="36" autocomplete="off" />
-              <button class="entry-button" type="submit">Join</button>
-            </form>
-            <p class="dialog-message" id="joinRoomMessage"></p>
-          </div>
+          <button id="createRoomButton" class="create-room-button" type="button">Create Room</button>
+          <div class="multi-divider">or join</div>
+          <form class="join-room-form" id="joinRoomForm">
+            <input id="joinRoomInput" placeholder="Room code" maxlength="36" autocomplete="off" />
+            <button class="entry-button" type="submit">Join</button>
+          </form>
+          <p class="dialog-message" id="joinRoomMessage"></p>
           <button id="entryLogoutButton" class="entry-ghost-button" type="button">Logout</button>
         </section>
       </section>
@@ -100,17 +94,17 @@
       <header class="topbar" aria-label="Room status">
         <button id="homeButton" class="home-button" type="button" aria-label="Return to home">←</button>
         <div class="topbar-actions">
-          <button id="toggleMusicButton" class="settings-button" type="button" hidden>Music</button>
-          <button id="toggleChatButton" class="settings-button" type="button" hidden>Chat</button>
           <button id="settingsButton" class="settings-button" type="button" aria-haspopup="dialog" aria-controls="settingsDialog">Settings</button>
         </div>
       </header>
 
       <section class="workspace-shell" id="workspaceShell">
         <aside class="side-panel music-panel" id="musicPanel" aria-label="Music panel">
+          <button class="panel-tab" id="openMusicButton" type="button" aria-label="Open music panel"><span>Music</span></button>
           <div class="side-panel-head">
             <h2 class="side-title">Music</h2>
             <div class="panel-head-actions">
+              <button id="musicMuteButton" class="icon-button" type="button">Mute</button>
               <button id="musicSkipButton" class="icon-button host-only-button" type="button" hidden>Skip</button>
               <button id="closeMusicButton" class="icon-button" type="button" aria-label="Close music panel">×</button>
             </div>
@@ -158,6 +152,7 @@
         </section>
 
         <aside class="side-panel chat-panel" id="chatPanel" aria-label="Chat panel">
+          <button class="panel-tab" id="openChatButton" type="button" aria-label="Open chat panel"><span>Chat</span></button>
           <div class="side-panel-head">
             <h2 class="side-title">Chat</h2>
             <button id="closeChatButton" class="icon-button" type="button" aria-label="Close chat panel">×</button>
@@ -190,6 +185,14 @@
               </div>
               <button id="settingsLogoutButton" class="icon-button" type="button">Logout</button>
             </div>
+          </section>
+
+          <section class="settings-section" aria-label="Theme">
+            <div>
+              <p class="section-kicker">Appearance</p>
+              <h2>Theme</h2>
+            </div>
+            <div class="theme-grid" id="themeGrid"></div>
           </section>
 
           <section class="settings-section multi-only" aria-label="Room link">

@@ -1,9 +1,12 @@
 <!doctype html>
-<html lang="ko">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Pomodoro Room</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@700&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
@@ -37,6 +40,12 @@
           </div>
           <div class="multi-panel" id="multiPanel" hidden>
             <button id="createRoomButton" class="create-room-button" type="button">방 만들기</button>
+            <div class="multi-divider">or</div>
+            <form class="join-room-form" id="joinRoomForm">
+              <input id="joinRoomInput" placeholder="Room code" maxlength="36" autocomplete="off" />
+              <button class="entry-button" type="submit">Join</button>
+            </form>
+            <p class="dialog-message" id="joinRoomMessage"></p>
           </div>
           <button id="entryLogoutButton" class="entry-ghost-button" type="button">Logout</button>
         </section>
@@ -89,21 +98,22 @@
 
     <main class="app-shell" id="timerApp" hidden>
       <header class="topbar" aria-label="Room status">
-        <div class="topbar-left">
-          <div class="connection-pill" id="connectionStatus">Solo</div>
-          <div class="viewer-pill" id="viewerBadge"></div>
-        </div>
+        <button id="homeButton" class="home-button" type="button" aria-label="Return to home">←</button>
         <div class="topbar-actions">
+          <button id="toggleMusicButton" class="settings-button" type="button" hidden>Music</button>
+          <button id="toggleChatButton" class="settings-button" type="button" hidden>Chat</button>
           <button id="settingsButton" class="settings-button" type="button" aria-haspopup="dialog" aria-controls="settingsDialog">Settings</button>
-          <button id="homeButton" class="settings-button" type="button">Home</button>
         </div>
       </header>
 
-      <section class="workspace-shell">
-        <aside class="side-panel music-panel" aria-label="Music panel">
+      <section class="workspace-shell" id="workspaceShell">
+        <aside class="side-panel music-panel" id="musicPanel" aria-label="Music panel">
           <div class="side-panel-head">
             <h2 class="side-title">Music</h2>
-            <button id="musicSkipButton" class="icon-button host-only-button" type="button" hidden>Skip</button>
+            <div class="panel-head-actions">
+              <button id="musicSkipButton" class="icon-button host-only-button" type="button" hidden>Skip</button>
+              <button id="closeMusicButton" class="icon-button" type="button" aria-label="Close music panel">×</button>
+            </div>
           </div>
 
           <section class="side-section music-now-section" aria-label="Now playing">
@@ -147,9 +157,10 @@
           </div>
         </section>
 
-        <aside class="side-panel chat-panel" aria-label="Chat panel">
+        <aside class="side-panel chat-panel" id="chatPanel" aria-label="Chat panel">
           <div class="side-panel-head">
             <h2 class="side-title">Chat</h2>
+            <button id="closeChatButton" class="icon-button" type="button" aria-label="Close chat panel">×</button>
           </div>
           <div class="chat-list" id="chatList"></div>
           <form class="chat-form" id="chatForm">

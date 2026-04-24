@@ -44,12 +44,14 @@ const state = {
   chat: [],
   music: { current: null, queue: [], maxPerUser: 5 },
   musicResults: [],
+  musicPanelOpen: true,
+  chatPanelOpen: true,
   reconnectTimer: null,
   copiedUntil: 0,
   noticeText: "",
   noticeUntil: 0,
   playerKey: "",
-  audioUnlocked: false
+  audioUnlocked: sessionStorage.getItem("pmdr.audioUnlocked") === "1"
 };
 
 const elements = {
@@ -69,6 +71,9 @@ const elements = {
   multiButton: document.querySelector("#multiButton"),
   multiPanel: document.querySelector("#multiPanel"),
   createRoomButton: document.querySelector("#createRoomButton"),
+  joinRoomForm: document.querySelector("#joinRoomForm"),
+  joinRoomInput: document.querySelector("#joinRoomInput"),
+  joinRoomMessage: document.querySelector("#joinRoomMessage"),
   createRoomDialog: document.querySelector("#createRoomDialog"),
   closeCreateRoomButton: document.querySelector("#closeCreateRoomButton"),
   createRoomForm: document.querySelector("#createRoomForm"),
@@ -78,8 +83,13 @@ const elements = {
   createShortMinutes: document.querySelector("#createShortMinutes"),
   createLongMinutes: document.querySelector("#createLongMinutes"),
   timerApp: document.querySelector("#timerApp"),
-  connectionStatus: document.querySelector("#connectionStatus"),
-  viewerBadge: document.querySelector("#viewerBadge"),
+  workspaceShell: document.querySelector("#workspaceShell"),
+  musicPanel: document.querySelector("#musicPanel"),
+  chatPanel: document.querySelector("#chatPanel"),
+  closeMusicButton: document.querySelector("#closeMusicButton"),
+  closeChatButton: document.querySelector("#closeChatButton"),
+  toggleMusicButton: document.querySelector("#toggleMusicButton"),
+  toggleChatButton: document.querySelector("#toggleChatButton"),
   settingsButton: document.querySelector("#settingsButton"),
   homeButton: document.querySelector("#homeButton"),
   modeLabel: document.querySelector("#modeLabel"),
@@ -130,6 +140,13 @@ const elements = {
 };
 
 const context = elements.canvas.getContext("2d");
+
+const ringColors = { track: "", progress: "" };
+function cacheRingColors() {
+  const s = getComputedStyle(document.documentElement);
+  ringColors.track = s.getPropertyValue("--ring-track").trim();
+  ringColors.progress = s.getPropertyValue("--ring-progress").trim();
+}
 
 function createTimerState(initialDurations = DEFAULT_DURATIONS) {
   return {
@@ -249,20 +266,11 @@ function updateSubline() {
   }
 }
 
-function setConnection(text, className) {
-  elements.connectionStatus.textContent = text;
-  elements.connectionStatus.className = `connection-pill ${className}`.trim();
-}
-
 function renderViewerBadge() {
   if (!state.user) {
-    elements.viewerBadge.textContent = "";
-    elements.viewerBadge.hidden = true;
     return;
   }
 
-  elements.viewerBadge.hidden = false;
-  elements.viewerBadge.textContent = state.user.username;
   elements.accountBadge.textContent = state.user.username;
   elements.settingsUsername.textContent = state.user.username;
 }
@@ -424,7 +432,7 @@ function drawTimer(progress) {
   const height = canvas.clientHeight;
   const cx = width / 2;
   const cy = height / 2;
-  const radius = Math.min(width, height) * 0.36;
+  const radius = Math.min(width, height) * 0.40;
 
   context.clearRect(0, 0, width, height);
   context.save();
@@ -432,17 +440,19 @@ function drawTimer(progress) {
   context.rotate(-Math.PI / 2);
 
   context.beginPath();
-  context.strokeStyle = "#e7e0d7";
-  context.lineWidth = 10;
+  context.strokeStyle = ringColors.track || "oklch(22% 0.016 62)";
+  context.lineWidth = 5;
   context.arc(0, 0, radius, 0, Math.PI * 2);
   context.stroke();
 
-  context.beginPath();
-  context.strokeStyle = "#c94d38";
-  context.lineWidth = 10;
-  context.lineCap = "round";
-  context.arc(0, 0, radius, 0, Math.PI * 2 * progress);
-  context.stroke();
+  if (progress > 0) {
+    context.beginPath();
+    context.strokeStyle = ringColors.progress || "oklch(72% 0.13 76)";
+    context.lineWidth = 5;
+    context.lineCap = "round";
+    context.arc(0, 0, radius, 0, Math.PI * 2 * progress);
+    context.stroke();
+  }
 
   context.restore();
 }
@@ -456,6 +466,14 @@ function resizeCanvas() {
   elements.canvas.width = Math.max(1, Math.floor(rect.width * ratio));
   elements.canvas.height = Math.max(1, Math.floor(rect.height * ratio));
   context.setTransform(ratio, 0, 0, ratio, 0, 0);
+  lastRenderedProgress = -1;
+  drawTimer(getProgress());
+}
+
+let resizeScheduled = null;
+function scheduleResize() {
+  clearTimeout(resizeScheduled);
+  resizeScheduled = setTimeout(resizeCanvas, 120);
 }
 
 function shareUrl() {
@@ -478,9 +496,21 @@ function updateUrl(room = "") {
   window.history.replaceState(null, "", next);
 }
 
+function setAudioUnlocked() {
+  if (state.audioUnlocked) {
+    return;
+  }
+  state.audioUnlocked = true;
+  sessionStorage.setItem("pmdr.audioUnlocked", "1");
+  if (state.session === "multi" && state.music.current) {
+    syncMusicPlayer(true);
+  } else {
+    elements.musicResumeButton.hidden = true;
+  }
+}
+
 function clearMusicPlayer() {
   state.playerKey = "";
-  state.audioUnlocked = false;
   elements.youtubePlayerHost.innerHTML = "";
   elements.musicResumeButton.hidden = true;
 }
@@ -571,6 +601,8 @@ function updateControls() {
 }
 
 function applyTimerToUI() {
+  lastRenderedTime = "";
+  lastRenderedProgress = -1;
   elements.modeLabel.textContent = MODE_COPY[state.timer.mode].label;
   elements.timeReadout.textContent = formatTime(getRemaining());
   elements.nextMode.textContent = `Next: ${MODE_COPY[getNextMode(state.timer.mode, state.timer.focusSessionsDone)].label}`;
@@ -761,7 +793,6 @@ function applySnapshot(payload) {
   state.pendingRoomSetup = state.isHost ? null : state.pendingRoomSetup;
   elements.roomInput.value = payload.room;
 
-  setConnection(state.isHost ? "Host" : "Guest", state.isHost ? "is-online" : "");
   updateControls();
   applyTimerToUI();
   renderParticipants();
@@ -879,7 +910,6 @@ function connect() {
     return;
   }
 
-  setConnection(state.isHost ? "Host" : "Joining", state.isHost ? "is-online" : "");
   const protocol = window.location.protocol === "https:" ? "wss" : "ws";
   const params = new URLSearchParams({
     room: state.room,
@@ -922,7 +952,6 @@ function connect() {
       return;
     }
     state.socket = null;
-    setConnection("Reconnecting", "is-offline");
     state.reconnectTimer = setTimeout(connect, 1200);
   });
 }
@@ -945,7 +974,6 @@ function startSolo() {
   setMusicMessage("");
   updateUrl();
   showTimerApp();
-  setConnection("Solo", "");
   updateControls();
   applyTimerToUI();
   renderParticipants();
@@ -1109,6 +1137,20 @@ async function handleMusicSearch(event) {
   }
 }
 
+function setPanelOpen(panel, open) {
+  if (panel === "music") {
+    state.musicPanelOpen = open;
+    elements.musicPanel.hidden = !open;
+    elements.toggleMusicButton.hidden = open;
+    elements.workspaceShell.classList.toggle("music-closed", !open);
+  } else {
+    state.chatPanelOpen = open;
+    elements.chatPanel.hidden = !open;
+    elements.toggleChatButton.hidden = open;
+    elements.workspaceShell.classList.toggle("chat-closed", !open);
+  }
+}
+
 function bindDialogBackdrop(dialog, closeFn) {
   dialog.addEventListener("click", (event) => {
     if (event.target === dialog) {
@@ -1119,14 +1161,6 @@ function bindDialogBackdrop(dialog, closeFn) {
 
 function bindEvents() {
   setAuthMode("login");
-  const unlockAudio = () => {
-    if (state.audioUnlocked || state.session !== "multi" || !state.music.current) {
-      return;
-    }
-    state.audioUnlocked = true;
-    syncMusicPlayer(true);
-  };
-
   elements.loginTabButton.addEventListener("click", () => setAuthMode("login"));
   elements.signupTabButton.addEventListener("click", () => setAuthMode("signup"));
   elements.authForm.addEventListener("submit", handleAuthSubmit);
@@ -1167,6 +1201,18 @@ function bindEvents() {
   elements.closeCreateRoomButton.addEventListener("click", () => closeDialog(elements.createRoomDialog));
   bindDialogBackdrop(elements.createRoomDialog, () => closeDialog(elements.createRoomDialog));
 
+  elements.joinRoomForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const room = sanitizeRoom(elements.joinRoomInput.value);
+    if (!room) {
+      elements.joinRoomMessage.textContent = "Enter a valid room code.";
+      return;
+    }
+    elements.joinRoomMessage.textContent = "";
+    elements.joinRoomInput.value = "";
+    startMulti(room);
+  });
+
   elements.settingsButton.addEventListener("click", () => {
     if (canControlTimer()) {
       openDialog(elements.settingsDialog);
@@ -1177,6 +1223,11 @@ function bindEvents() {
   bindDialogBackdrop(elements.settingsDialog, () => closeDialog(elements.settingsDialog));
 
   elements.homeButton.addEventListener("click", goHome);
+
+  elements.closeMusicButton.addEventListener("click", () => setPanelOpen("music", false));
+  elements.closeChatButton.addEventListener("click", () => setPanelOpen("chat", false));
+  elements.toggleMusicButton.addEventListener("click", () => setPanelOpen("music", true));
+  elements.toggleChatButton.addEventListener("click", () => setPanelOpen("chat", true));
 
   elements.startPauseButton.addEventListener("click", () => {
     sendTimerCommand(state.timer.status === "running" ? "pause" : "start");
@@ -1233,8 +1284,7 @@ function bindEvents() {
     if (!state.music.current) {
       return;
     }
-    state.audioUnlocked = true;
-    syncMusicPlayer(true);
+    setAudioUnlocked();
   });
   elements.musicSearchInput.addEventListener("keydown", (event) => {
     if (event.key === "Enter") {
@@ -1245,21 +1295,35 @@ function bindEvents() {
     send({ type: "music", action: "skip" });
   });
 
-  window.addEventListener("pointerdown", unlockAudio, { passive: true });
-  window.addEventListener("keydown", unlockAudio);
-  window.addEventListener("resize", resizeCanvas);
+  window.addEventListener("pointerdown", setAudioUnlocked, { passive: true });
+  window.addEventListener("keydown", setAudioUnlocked);
+  window.addEventListener("resize", scheduleResize);
 }
+
+let lastRenderedTime = "";
+let lastRenderedProgress = -1;
 
 function tick() {
   if (!elements.timerApp.hidden) {
     const remaining = getRemaining();
-    elements.timeReadout.textContent = formatTime(remaining);
+    const formatted = formatTime(remaining);
+
+    if (formatted !== lastRenderedTime) {
+      lastRenderedTime = formatted;
+      elements.timeReadout.textContent = formatted;
+    }
 
     if (state.session === "solo" && state.timer.status === "running" && remaining <= 0) {
       transitionTimer(state.timer, "Timer");
       addLocalHistory("Timer", `${state.timer.mode} started`);
       applyTimerToUI();
       renderHistory();
+    }
+
+    const progress = getProgress();
+    if (Math.abs(progress - lastRenderedProgress) > 0.0002) {
+      lastRenderedProgress = progress;
+      drawTimer(progress);
     }
 
     if (Date.now() > state.copiedUntil && elements.copyLinkButton.textContent !== "Link") {
@@ -1269,8 +1333,6 @@ function tick() {
     if (state.noticeText && Date.now() > state.noticeUntil) {
       updateSubline();
     }
-
-    drawTimer(getProgress());
   }
 
   requestAnimationFrame(tick);
@@ -1280,6 +1342,7 @@ function init() {
   state.name = normalizeName(localStorage.getItem(STORAGE_KEYS.displayName) || "", "Maker");
   elements.nameInput.value = state.name;
   elements.createNameInput.value = state.name;
+  cacheRingColors();
   renderColorDots();
   bindEvents();
   restoreSession();

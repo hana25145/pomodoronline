@@ -446,7 +446,10 @@ function createTimerState(initialDurations = DEFAULT_DURATIONS) {
 }
 
 function sanitizeRoom(value) {
-  return String(value || "")
+  const str = String(value || "").trim();
+  const urlRoom = str.match(/[?&]room=([^&]+)/);
+  const raw = urlRoom ? decodeURIComponent(urlRoom[1]) : str;
+  return raw
     .trim()
     .toLowerCase()
     .replace(/[^\p{Letter}\p{Number}-]+/gu, "-")
@@ -1582,26 +1585,31 @@ function bindEvents() {
   window.addEventListener("resize", scheduleResize);
 
   elements.debugAssignHostBtn.addEventListener("click", async () => {
-    if (!state.room) {
+    const room = String(state.room || "");
+    if (!room) {
       elements.debugHostStatus.textContent = "Not in a room.";
       return;
     }
-    elements.debugHostStatus.textContent = "checking…";
+    elements.debugHostStatus.textContent = `checking (room="${room}")…`;
+    const url = `${window.location.origin}/api/debug/assign-host?room=${encodeURIComponent(room)}`;
+    console.debug("[debug-host] fetching", url);
     try {
-      const res = await fetch(`/api/debug/assign-host?room=${encodeURIComponent(state.room)}`, { method: "POST" });
-      const data = await res.json();
+      const res = await fetch(url, { method: "POST" });
+      const text = await res.text();
       if (!res.ok) {
-        elements.debugHostStatus.textContent = `Error: ${data.error}`;
+        elements.debugHostStatus.textContent = `Server ${res.status}: ${text.slice(0, 120)}`;
         return;
       }
+      const data = JSON.parse(text);
       if (data.hadHost) {
         elements.debugHostStatus.textContent = `Host OK — ${data.hostName} (${data.hostId})`;
       } else if (data.hostName) {
-        elements.debugHostStatus.textContent = `No host found → assigned ${data.hostName} (${data.hostId})`;
+        elements.debugHostStatus.textContent = `No host → assigned ${data.hostName} (${data.hostId})`;
       } else {
         elements.debugHostStatus.textContent = "No host, no participants to assign.";
       }
     } catch (e) {
+      console.error("[debug-host] error", e);
       elements.debugHostStatus.textContent = `Fetch error: ${e.message}`;
     }
   });

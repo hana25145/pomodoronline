@@ -952,7 +952,10 @@ function renderParticipants() {
     dot.className = "participant-dot";
     dot.style.setProperty("--avatar", COLORS[participant.color] || COLORS.tomato);
     const name = document.createElement("span");
-    name.textContent = participant.isHost ? `${participant.name} (HOST)` : participant.name;
+    const isMe = participant.name === state.name;
+    const hostTag = participant.isHost ? " (HOST)" : "";
+    const youTag = isMe ? " (YOU)" : "";
+    name.textContent = `${participant.name}${hostTag}${youTag}`;
     chip.append(dot, name);
     elements.participantsBar.append(chip);
   }

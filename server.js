@@ -362,8 +362,16 @@ function snapshot(room, client = null) {
 }
 
 function handleFocusTaskMessage(client, message) {
-    }
-  };
+  const room = client.room;
+  const username = client.user.username;
+  const text = String(message.text || "").trim().slice(0, 120);
+
+  if (!room.focusTasks.has(username)) {
+    room.focusTasks.set(username, { username, name: client.participant.name, color: client.participant.color, task: "" });
+  }
+  const entry = room.focusTasks.get(username);
+  entry.task = text;
+  return true;
 }
 
 function handleStatusMessage(client, message) {
@@ -1222,6 +1230,7 @@ function handleUpgrade(request, socket) {
     const ftEntry = room.focusTasks.get(user.username);
     ftEntry.name = participant.name;
     ftEntry.color = participant.color;
+  }
   room.presence.set(user.username, {
     statusText: participant.statusText,
     statusUpdatedAt: participant.statusUpdatedAt,

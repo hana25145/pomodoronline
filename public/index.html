@@ -129,7 +129,10 @@
           </div>
 
           <section class="side-section music-now-section" aria-label="Now playing">
-            <h2 id="musicCurrentTitle">Nothing playing</h2>
+            <div class="music-now-header">
+              <h2 id="musicCurrentTitle">Nothing playing</h2>
+              <button id="musicHeartButton" class="icon-button music-heart-button" type="button" hidden aria-label="Save track">♥</button>
+            </div>
             <p class="music-meta" id="musicCurrentMeta">Queue is empty.</p>
             <div class="music-progress" id="musicProgress" hidden>
               <div class="music-progress-track">
@@ -144,6 +147,10 @@
           </section>
 
           <section class="side-section music-search-section" aria-label="Search music">
+            <div class="music-search-tabs">
+              <button type="button" id="musicSearchModeSearch" class="music-search-tab is-active">Search</button>
+              <button type="button" id="musicSearchModeSaved" class="music-search-tab">Saved</button>
+            </div>
             <form class="music-search-form" id="musicSearchForm">
               <input id="musicSearchInput" aria-label="Search YouTube music" maxlength="120" autocomplete="off" placeholder="Search YouTube music" />
               <button class="icon-button" type="submit">Search</button>
@@ -190,14 +197,14 @@
         </aside>
       </section>
 
-      <section class="bottom-panel" id="todoPanel" aria-label="Todo panel">
-        <button class="bottom-panel-tab" id="todoPanelTab" type="button" aria-expanded="false" aria-controls="todoPanelBody">
-          <span class="bottom-tab-label">Todo</span>
-          <span class="bottom-tab-count" id="todoPanelCount" aria-label="pending tasks"></span>
+      <section class="bottom-panel" id="focusTaskPanel" aria-label="Focus task panel">
+        <button class="bottom-panel-tab" id="focusTaskPanelTab" type="button" aria-expanded="false" aria-controls="focusTaskPanelBody">
+          <span class="bottom-tab-label">Focus</span>
+          <span class="bottom-tab-preview" id="focusTaskPreview"></span>
           <span class="bottom-tab-chevron" aria-hidden="true">▲</span>
         </button>
-        <div class="bottom-panel-body" id="todoPanelBody">
-          <div class="todo-lists" id="todoLists"></div>
+        <div class="bottom-panel-body" id="focusTaskPanelBody">
+          <div class="focus-task-list" id="focusTaskList"></div>
         </div>
       </section>
     </main>

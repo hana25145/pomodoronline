@@ -29,7 +29,8 @@ const STORAGE_KEYS = {
   color: "pmdr.color",
   theme: "pmdr.theme",
   muted: "pmdr.muted",
-  soloTasks: "pmdr.soloTasks"
+  focusTask: "pmdr.focusTask",
+  savedMusic: "pmdr.savedMusic"
 };
 
 const CLIENT_SESSION_ID = (() => {
@@ -341,6 +342,8 @@ const state = {
   chat: [],
   music: { current: null, queue: [], maxPerUser: 5 },
   musicResults: [],
+  savedMusic: JSON.parse(localStorage.getItem(STORAGE_KEYS.savedMusic) || "[]"),
+  musicSearchMode: "search",
   musicPanelOpen: true,
   chatPanelOpen: true,
   musicMuted: localStorage.getItem(STORAGE_KEYS.muted) === "1",
@@ -351,6 +354,8 @@ const state = {
   noticeUntil: 0,
   playerKey: "",
   audioUnlocked: sessionStorage.getItem("pmdr.audioUnlocked") === "1",
+  focusTasks: [],
+  focusTaskPanelOpen: false
   statusText: "",
   statusCooldownUntil: 0,
   todos: [],
@@ -428,6 +433,9 @@ const elements = {
   musicCurrentTitle: document.querySelector("#musicCurrentTitle"),
   musicCurrentMeta: document.querySelector("#musicCurrentMeta"),
   musicSkipButton: document.querySelector("#musicSkipButton"),
+  musicHeartButton: document.querySelector("#musicHeartButton"),
+  musicSearchModeSearch: document.querySelector("#musicSearchModeSearch"),
+  musicSearchModeSaved: document.querySelector("#musicSearchModeSaved"),
   musicSearchForm: document.querySelector("#musicSearchForm"),
   musicSearchInput: document.querySelector("#musicSearchInput"),
   musicMessage: document.querySelector("#musicMessage"),
@@ -444,11 +452,10 @@ const elements = {
   chatSubmitButton: document.querySelector("#chatForm button[type='submit']"),
   youtubePlayerHost: document.querySelector("#youtubePlayerHost"),
   canvas: document.querySelector("#focusCanvas"),
-  todoPanel: document.querySelector("#todoPanel"),
-  todoPanelTab: document.querySelector("#todoPanelTab"),
-  todoPanelBody: document.querySelector("#todoPanelBody"),
-  todoLists: document.querySelector("#todoLists"),
-  todoPanelCount: document.querySelector("#todoPanelCount")
+  focusTaskPanel: document.querySelector("#focusTaskPanel"),
+  focusTaskPanelTab: document.querySelector("#focusTaskPanelTab"),
+  focusTaskList: document.querySelector("#focusTaskList"),
+  focusTaskPreview: document.querySelector("#focusTaskPreview")
 };
 
 const context = elements.canvas.getContext("2d");
@@ -1034,6 +1041,8 @@ function updateUrl(room = "") {
 let audioInitializedInTab = state.audioUnlocked;
 let musicKeepAliveScheduledAt = 0;
 let lastMusicKeepAliveAt = 0;
+/* True once YouTube reports its player has started playing (onStateChange=1). */
+let youtubePlayerPlaying = false;
 
 function getMusicIframe() {
   return elements.youtubePlayerHost.querySelector("iframe");
@@ -1093,24 +1102,6 @@ function playBell() {
   } catch (_) {}
 }
 
-function setAudioUnlocked() {
-  if (audioInitializedInTab) return;
-  audioInitializedInTab = true;
-  state.audioUnlocked = true;
-  sessionStorage.setItem("pmdr.audioUnlocked", "1");
-  if (state.session === "multi" && state.music.current && !state.musicMuted) {
-    // Unmute the existing iframe rather than recreating it — recreation seeks to a
-    // calculated position and causes drift vs. other participants. The iframe has been
-    // playing silently with &mute=1 since page load, so its position is already correct.
-    const iframe = elements.youtubePlayerHost.querySelector("iframe");
-    if (iframe) {
-      iframe.contentWindow.postMessage(JSON.stringify({ event: "command", func: "unMute", args: [] }), "*");
-    } else {
-      syncMusicPlayer(true); // no iframe yet (e.g. music started after gesture), fall back
-    }
-  }
-}
-
 function unlockAudioPlayback() {
   if (!audioInitializedInTab) {
     audioInitializedInTab = true;
@@ -1122,12 +1113,20 @@ function unlockAudioPlayback() {
   }
   if (!getMusicIframe()) {
     syncMusicPlayer(true);
+    return; // unmute will happen via onStateChange once player starts
   }
-  scheduleMusicKeepAlive({ unmute: !state.musicMuted, attempts: 5, initialDelay: 80 });
+  if (!state.musicMuted) {
+    if (youtubePlayerPlaying) {
+      postMusicCommand("unMute");
+    } else {
+      scheduleMusicKeepAlive({ unmute: true, attempts: 3, initialDelay: 80 });
+    }
+  }
 }
 
 function clearMusicPlayer() {
   state.playerKey = "";
+  youtubePlayerPlaying = false;
   musicKeepAliveScheduledAt += 1;
   elements.youtubePlayerHost.innerHTML = "";
   if (musicProgressRafId) { cancelAnimationFrame(musicProgressRafId); musicProgressRafId = null; }
@@ -1145,6 +1144,7 @@ function syncMusicPlayer(force = false) {
     return;
   }
 
+  youtubePlayerPlaying = false;
   const resumeAtSeconds = Math.max(0, Math.floor((Date.now() + state.serverOffset - current.startedAt) / 1000));
   const iframe = document.createElement("iframe");
   iframe.width = "200";
@@ -1155,21 +1155,8 @@ function syncMusicPlayer(force = false) {
   iframe.allow = "autoplay; encrypted-media; picture-in-picture";
   iframe.referrerPolicy = "strict-origin-when-cross-origin";
   iframe.allowFullscreen = true;
-  iframe.addEventListener("load", () => {
-    scheduleMusicKeepAlive({
-      unmute: audioInitializedInTab && !state.musicMuted,
-      attempts: 5,
-      initialDelay: 240
-    });
-  });
   elements.youtubePlayerHost.replaceChildren(iframe);
   state.playerKey = key;
-  scheduleMusicKeepAlive({
-    unmute: audioInitializedInTab && !state.musicMuted,
-    attempts: 4,
-    initialDelay: 520
-  });
-  return;
 }
 
 function formatMusicSeconds(totalSeconds) {
@@ -1375,8 +1362,38 @@ function renderChat() {
   requestAnimationFrame(scrollChatToBottom);
 }
 
+function isSaved(videoId) {
+  return state.savedMusic.some(t => t.videoId === videoId);
+}
+
+function toggleSavedTrack(track) {
+  const idx = state.savedMusic.findIndex(t => t.videoId === track.videoId);
+  if (idx >= 0) {
+    state.savedMusic.splice(idx, 1);
+  } else {
+    state.savedMusic.push({
+      videoId: track.videoId,
+      title: track.title,
+      channelTitle: track.channelTitle,
+      thumbnail: track.thumbnail,
+      durationText: track.durationText,
+      durationSeconds: track.durationSeconds
+    });
+  }
+  localStorage.setItem(STORAGE_KEYS.savedMusic, JSON.stringify(state.savedMusic));
+  renderMusic();
+}
+
 function renderMusic() {
   const current = state.music.current;
+  if (current) {
+    elements.musicHeartButton.hidden = false;
+    elements.musicHeartButton.classList.toggle("is-saved", isSaved(current.videoId));
+    elements.musicHeartButton.title = isSaved(current.videoId) ? "Unsave" : "Save";
+  } else {
+    elements.musicHeartButton.hidden = true;
+  }
+
   elements.musicCurrentTitle.textContent = current ? current.title : state.session === "multi" ? "Nothing playing" : "Room music";
   elements.musicCurrentMeta.textContent = current
     ? `${current.requestedBy.name} - ${current.channelTitle}`
@@ -1406,8 +1423,13 @@ function renderMusic() {
     elements.musicQueueRemaining.hidden = true;
   }
 
+  elements.musicSearchModeSearch.classList.toggle("is-active", state.musicSearchMode === "search");
+  elements.musicSearchModeSaved.classList.toggle("is-active", state.musicSearchMode === "saved");
+  elements.musicSearchForm.hidden = state.musicSearchMode === "saved";
+
+  const resultsToShow = state.musicSearchMode === "saved" ? state.savedMusic : state.musicResults;
   elements.musicResults.innerHTML = "";
-  for (const result of state.musicResults) {
+  for (const result of resultsToShow) {
     const item = document.createElement("li");
     item.className = "music-result";
     item.innerHTML = `
@@ -1416,19 +1438,24 @@ function renderMusic() {
         <div class="music-title"></div>
         <div class="music-meta"></div>
       </div>
-      <div class="music-result-actions"><button class="icon-button" type="button">Add</button></div>
+      <div class="music-result-actions">
+        <button class="icon-button music-heart-button" type="button" aria-label="Save track">♥</button>
+        <button class="icon-button music-add-button" type="button">Add</button>
+      </div>
     `;
     item.querySelector(".music-thumb").src = result.thumbnail;
     item.querySelector(".music-title").textContent = result.title;
     item.querySelector(".music-meta").textContent = `${result.channelTitle} - ${result.durationText}`;
-    item.querySelector("button").addEventListener("click", () => {
-      send({
-        type: "music",
-        action: "add",
-        track: result
-      });
+    const heartBtn = item.querySelector(".music-heart-button");
+    heartBtn.classList.toggle("is-saved", isSaved(result.videoId));
+    heartBtn.addEventListener("click", () => toggleSavedTrack(result));
+    item.querySelector(".music-add-button").addEventListener("click", () => {
+      send({ type: "music", action: "add", track: result });
     });
     elements.musicResults.append(item);
+  }
+  if (state.musicSearchMode === "saved") {
+    setMusicMessage(state.savedMusic.length === 0 ? "No saved tracks. Heart a track to save it." : "");
   }
 
   elements.musicQueue.innerHTML = "";
@@ -1470,6 +1497,15 @@ function renderMusic() {
       item.querySelector(".queue-item-actions").append(button);
     }
 
+    const queueHeartBtn = document.createElement("button");
+    queueHeartBtn.className = "icon-button music-heart-button";
+    queueHeartBtn.type = "button";
+    queueHeartBtn.setAttribute("aria-label", "Save track");
+    queueHeartBtn.textContent = "♥";
+    queueHeartBtn.classList.toggle("is-saved", isSaved(track.videoId));
+    queueHeartBtn.addEventListener("click", () => toggleSavedTrack(track));
+    item.querySelector(".queue-item-actions").append(queueHeartBtn);
+
     elements.musicQueue.append(item);
   }
 }
@@ -1500,6 +1536,7 @@ function applySnapshot(payload) {
   lastKnownMode = state.timer.mode;
   if (prevMode !== null && prevMode !== state.timer.mode) playBell();
 
+  state.focusTasks = payload.focusTasks || [];
   updateControls();
   applyTimerToUI();
   renderStatusComposer(true);
@@ -1507,6 +1544,7 @@ function applySnapshot(payload) {
   renderHistory();
   renderChat();
   renderMusic();
+  renderFocusTasks();
   syncMusicPlayer();
 }
 
@@ -1695,6 +1733,12 @@ function startSolo() {
   state.chat = [];
   state.music = { current: null, queue: [], maxPerUser: 5 };
   state.musicResults = [];
+  state.focusTasks = [{
+    username: state.user?.username || "me",
+    name: state.name,
+    color: state.color,
+    task: localStorage.getItem(STORAGE_KEYS.focusTask) || ""
+  }];
   state.statusText = "";
   state.statusCooldownUntil = 0;
   setMusicMessage("");
@@ -1707,6 +1751,7 @@ function startSolo() {
   renderHistory();
   renderChat();
   renderMusic();
+  renderFocusTasks();
 }
 
 async function joinRoom(room) {
@@ -1736,6 +1781,7 @@ function startMulti(room, setup = null) {
   state.chat = [];
   state.music = { current: null, queue: [], maxPerUser: 5 };
   state.musicResults = [];
+  state.focusTasks = [];
   state.statusText = "";
   state.statusCooldownUntil = 0;
   setMusicMessage("");
@@ -1750,6 +1796,7 @@ function startMulti(room, setup = null) {
   renderHistory();
   renderChat();
   renderMusic();
+  renderFocusTasks();
   connect();
 }
 
@@ -1768,6 +1815,7 @@ function goHome() {
   state.chat = [];
   state.music = { current: null, queue: [], maxPerUser: 5 };
   state.musicResults = [];
+  state.focusTasks = [];
   state.statusText = "";
   state.statusCooldownUntil = 0;
   setMusicMessage("");
@@ -1890,277 +1938,93 @@ function setPanelOpen(panel, open) {
   }
 }
 
-function setTodoPanelOpen(open) {
-  state.todoPanelOpen = open;
-  elements.todoPanel.classList.toggle("is-open", open);
-  elements.todoPanelTab.setAttribute("aria-expanded", String(open));
+function setFocusTaskPanelOpen(open) {
+  state.focusTaskPanelOpen = open;
+  elements.focusTaskPanel.classList.toggle("is-open", open);
+  elements.focusTaskPanelTab.setAttribute("aria-expanded", String(open));
 }
 
-function createTodoItem(task, isMe) {
-  const item = document.createElement("div");
-  item.className = [
-    "todo-item",
-    task.forSession ? "is-for-session" : "",
-    task.done ? "is-done" : ""
-  ].filter(Boolean).join(" ");
-
-  const checkbox = document.createElement("button");
-  checkbox.type = "button";
-  checkbox.className = `todo-check${task.done ? " is-checked" : ""}`;
-  checkbox.setAttribute("aria-label", task.done ? "Mark incomplete" : "Mark complete");
-  checkbox.textContent = task.done ? "✓" : "";
-  if (isMe) {
-    checkbox.addEventListener("click", () => {
-      if (state.session === "multi") {
-        send({ type: "todo", action: "toggle", id: task.id });
-      } else {
-        handleSoloTodo("toggle", { id: task.id });
-      }
-    });
-  } else {
-    checkbox.disabled = true;
-  }
-
-  const textEl = document.createElement("span");
-  textEl.className = `todo-item-text${task.done ? " is-done" : ""}${isMe ? "" : " is-readonly"}`;
-  textEl.textContent = task.text;
-  textEl.title = task.text;
-
-  if (isMe) {
-    textEl.addEventListener("click", () => {
-      const editInput = document.createElement("input");
-      editInput.className = "todo-edit-input";
-      editInput.value = task.text;
-      editInput.maxLength = 200;
-      textEl.replaceWith(editInput);
-      editInput.focus();
-      editInput.select();
-
-      let saved = false;
-      const save = () => {
-        if (saved) return;
-        saved = true;
-        const newText = editInput.value.trim();
-        if (newText && newText !== task.text) {
-          if (state.session === "multi") {
-            send({ type: "todo", action: "edit", id: task.id, text: newText });
-          } else {
-            handleSoloTodo("edit", { id: task.id, text: newText });
-          }
-        } else {
-          editInput.replaceWith(textEl);
-        }
-      };
-
-      editInput.addEventListener("blur", save);
-      editInput.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") { e.preventDefault(); editInput.blur(); }
-        if (e.key === "Escape") { saved = true; editInput.replaceWith(textEl); }
-      });
-    });
-  }
-
-  item.append(checkbox, textEl);
-
-  if (isMe) {
-    const actions = document.createElement("div");
-    actions.className = "todo-item-actions";
-
-    const sessionBtn = document.createElement("button");
-    sessionBtn.type = "button";
-    sessionBtn.className = `todo-item-btn${task.forSession ? " is-session" : ""}`;
-    sessionBtn.title = task.forSession ? "Remove from session focus" : "Mark for this session";
-    sessionBtn.textContent = task.forSession ? "★" : "☆";
-    sessionBtn.addEventListener("click", () => {
-      if (state.session === "multi") {
-        send({ type: "todo", action: "session", id: task.id });
-      } else {
-        handleSoloTodo("session", { id: task.id });
-      }
-    });
-
-    const deleteBtn = document.createElement("button");
-    deleteBtn.type = "button";
-    deleteBtn.className = "todo-item-btn";
-    deleteBtn.title = "Delete task";
-    deleteBtn.textContent = "×";
-    deleteBtn.addEventListener("click", () => {
-      if (state.session === "multi") {
-        send({ type: "todo", action: "delete", id: task.id });
-      } else {
-        handleSoloTodo("delete", { id: task.id });
-      }
-    });
-
-    actions.append(sessionBtn, deleteBtn);
-    item.append(actions);
-  }
-
-  return item;
-}
-
-function renderTodos() {
-  elements.todoLists.innerHTML = "";
+function renderFocusTasks() {
   const myUsername = state.user?.username;
 
-  const sorted = [...state.todos].sort((a, b) => {
+  // Preserve the focused input value across re-renders
+  const activeEl = document.activeElement;
+  const inputFocused = activeEl?.classList.contains("focus-task-input") && elements.focusTaskList.contains(activeEl);
+  const savedValue = inputFocused ? activeEl.value : null;
+
+  const myEntry = state.focusTasks.find((e) => e.username === myUsername);
+  elements.focusTaskPreview.textContent = myEntry?.task || "";
+
+  const allEntries = [...state.focusTasks].sort((a, b) => {
     if (a.username === myUsername) return -1;
     if (b.username === myUsername) return 1;
     return 0;
   });
 
-  const myEntry = state.todos.find((e) => e.username === myUsername);
-  const sessionCount = myEntry ? myEntry.tasks.filter((t) => t.forSession && !t.done).length : 0;
-  const pendingCount = myEntry ? myEntry.tasks.filter((t) => !t.done).length : 0;
-  elements.todoPanelCount.textContent = sessionCount > 0
-    ? `${sessionCount} in session`
-    : pendingCount > 0 ? `${pendingCount} pending` : "";
-
-  if (sorted.length === 0) {
-    const empty = document.createElement("p");
-    empty.className = "todo-empty-state";
-    empty.textContent = "Add your first task below.";
-    elements.todoLists.append(empty);
-
-    if (state.session !== "multi" || state.user) {
-      elements.todoLists.append(buildAddRow(myUsername));
-    }
-    return;
+  // In multi, if user has no server entry yet, prepend a local placeholder
+  if (!myEntry && myUsername && state.session === "multi") {
+    allEntries.unshift({ username: myUsername, name: state.name, color: state.color, task: "" });
   }
 
-  for (const entry of sorted) {
+  elements.focusTaskList.innerHTML = "";
+
+  for (const entry of allEntries) {
     const isMe = entry.username === myUsername;
-    const col = document.createElement("div");
-    col.className = "todo-user-col";
+    const row = document.createElement("div");
+    row.className = "focus-task-row";
+    row.dataset.username = entry.username;
 
-    const header = document.createElement("div");
-    header.className = "todo-col-header";
     const dot = document.createElement("span");
-    dot.className = "todo-col-dot";
+    dot.className = "focus-task-dot";
     dot.style.setProperty("--dot-color", COLORS[entry.color] || COLORS.tomato);
-    const nameEl = document.createElement("span");
-    nameEl.className = "todo-col-name";
-    nameEl.textContent = isMe ? `${entry.name} (you)` : entry.name;
-    header.append(dot, nameEl);
-    col.append(header);
 
-    const taskList = document.createElement("div");
-    taskList.className = "todo-tasks";
-    for (const task of entry.tasks) {
-      taskList.append(createTodoItem(task, isMe));
-    }
-    if (entry.tasks.length === 0) {
-      const empty = document.createElement("p");
-      empty.className = "todo-empty";
-      empty.textContent = isMe ? "No tasks yet." : "Nothing here.";
-      taskList.append(empty);
-    }
-    col.append(taskList);
+    const nameEl = document.createElement("span");
+    nameEl.className = "focus-task-name";
+    nameEl.textContent = isMe ? `${entry.name} (you)` : entry.name;
 
     if (isMe) {
-      col.append(buildAddRow(myUsername));
-    }
+      const input = document.createElement("input");
+      input.className = "focus-task-input";
+      input.value = inputFocused ? savedValue : (entry.task || "");
+      input.placeholder = "What are you working on?";
+      input.maxLength = 120;
+      input.autocomplete = "off";
 
-    elements.todoLists.append(col);
-  }
+      let lastSent = entry.task || "";
 
-  // If user has no entry yet (just joined multi room), show a column for them
-  if (!myEntry && myUsername && state.session === "multi") {
-    const col = document.createElement("div");
-    col.className = "todo-user-col";
-    const header = document.createElement("div");
-    header.className = "todo-col-header";
-    const dot = document.createElement("span");
-    dot.className = "todo-col-dot";
-    dot.style.setProperty("--dot-color", COLORS[state.color] || COLORS.tomato);
-    const nameEl = document.createElement("span");
-    nameEl.className = "todo-col-name";
-    nameEl.textContent = `${state.name} (you)`;
-    header.append(dot, nameEl);
-    const taskList = document.createElement("div");
-    taskList.className = "todo-tasks";
-    const empty = document.createElement("p");
-    empty.className = "todo-empty";
-    empty.textContent = "No tasks yet.";
-    taskList.append(empty);
-    col.append(header, taskList, buildAddRow(myUsername));
-    elements.todoLists.prepend(col);
-  }
-}
+      const save = () => {
+        const text = input.value.trim();
+        if (text === lastSent) return;
+        lastSent = text;
+        if (state.session === "multi") {
+          send({ type: "focusTask", text });
+        } else {
+          if (state.focusTasks[0]) state.focusTasks[0].task = text;
+          localStorage.setItem(STORAGE_KEYS.focusTask, text);
+          elements.focusTaskPreview.textContent = text;
+        }
+      };
 
-function buildAddRow(myUsername) {
-  const addRow = document.createElement("div");
-  addRow.className = "todo-add-row";
-  const input = document.createElement("input");
-  input.className = "todo-add-input";
-  input.placeholder = "Add a task...";
-  input.maxLength = 200;
-  input.autocomplete = "off";
-  const btn = document.createElement("button");
-  btn.type = "button";
-  btn.className = "todo-add-btn";
-  btn.textContent = "Add";
+      input.addEventListener("blur", save);
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") { e.preventDefault(); input.blur(); }
+        if (e.key === "Escape") { input.value = lastSent; input.blur(); }
+      });
 
-  const addTask = () => {
-    const text = input.value.trim();
-    if (!text) return;
-    input.value = "";
-    if (state.session === "multi") {
-      send({ type: "todo", action: "add", text });
+      row.append(dot, nameEl, input);
+
+      if (inputFocused) {
+        requestAnimationFrame(() => { input.focus(); input.setSelectionRange(input.value.length, input.value.length); });
+      }
     } else {
-      handleSoloTodo("add", { text });
+      const taskEl = document.createElement("span");
+      taskEl.className = "focus-task-text";
+      taskEl.textContent = entry.task || "";
+      row.append(dot, nameEl, taskEl);
     }
-    input.focus();
-  };
 
-  btn.addEventListener("click", addTask);
-  input.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") { e.preventDefault(); addTask(); }
-  });
-
-  addRow.append(input, btn);
-  return addRow;
-}
-
-function handleSoloTodo(action, extra = {}) {
-  if (!state.todos.length) return;
-  const entry = state.todos[0];
-
-  switch (action) {
-    case "add": {
-      const text = String(extra.text || "").trim().slice(0, 200);
-      if (!text) return;
-      entry.tasks.push({ id: randomId(8), text, done: false, forSession: false, createdAt: Date.now() });
-      break;
-    }
-    case "edit": {
-      const task = entry.tasks.find((t) => t.id === extra.id);
-      if (!task) return;
-      const text = String(extra.text || "").trim().slice(0, 200);
-      if (text) task.text = text;
-      break;
-    }
-    case "delete": {
-      const idx = entry.tasks.findIndex((t) => t.id === extra.id);
-      if (idx !== -1) entry.tasks.splice(idx, 1);
-      break;
-    }
-    case "toggle": {
-      const task = entry.tasks.find((t) => t.id === extra.id);
-      if (task) task.done = !task.done;
-      break;
-    }
-    case "session": {
-      const task = entry.tasks.find((t) => t.id === extra.id);
-      if (task) task.forSession = !task.forSession;
-      break;
-    }
-    default:
-      return;
+    elements.focusTaskList.append(row);
   }
-
-  localStorage.setItem(STORAGE_KEYS.soloTasks, JSON.stringify(entry.tasks));
-  renderTodos();
 }
 
 function bindDialogBackdrop(dialog, closeFn) {
@@ -2241,6 +2105,7 @@ function bindEvents() {
   elements.closeChatButton.addEventListener("click", () => setPanelOpen("chat", false));
   elements.openMusicButton.addEventListener("click", () => setPanelOpen("music", true));
   elements.openChatButton.addEventListener("click", () => setPanelOpen("chat", true));
+  elements.focusTaskPanelTab.addEventListener("click", () => setFocusTaskPanelOpen(!state.focusTaskPanelOpen));
   elements.musicMuteButton.addEventListener("click", () => setMusicMuted(!state.musicMuted));
 
   elements.startPauseButton.addEventListener("click", () => {
@@ -2316,6 +2181,19 @@ function bindEvents() {
     elements.chatInput.value = "";
   });
 
+  elements.musicHeartButton.addEventListener("click", () => {
+    if (state.music.current) toggleSavedTrack(state.music.current);
+  });
+  elements.musicSearchModeSearch.addEventListener("click", () => {
+    state.musicSearchMode = "search";
+    setMusicMessage("");
+    renderMusic();
+  });
+  elements.musicSearchModeSaved.addEventListener("click", () => {
+    state.musicSearchMode = "saved";
+    renderMusic();
+  });
+
   elements.musicSearchForm.addEventListener("submit", handleMusicSearch);
   elements.musicSearchInput.addEventListener("keydown", (event) => {
     if (event.key === "Enter") {
@@ -2331,28 +2209,52 @@ function bindEvents() {
   window.addEventListener("touchend", unlockAudioPlayback, { passive: true });
   window.addEventListener("click", unlockAudioPlayback, { passive: true });
   window.addEventListener("keydown", unlockAudioPlayback);
+
+  // Receive YouTube player state events. onStateChange fires once the player has
+  // finished its initial seek and is truly playing (state=1), making it the right
+  // moment to unmute — avoids the old approach of firing unMute 240-520ms after
+  // iframe load, which could arrive before the seek to `start=X` completed.
+  window.addEventListener("message", (event) => {
+    if (!event.origin.includes("youtube.com")) return;
+    let data;
+    try { data = JSON.parse(event.data); } catch { return; }
+    if (data.event !== "onStateChange") return;
+    if (data.info === 1) { // YT.PlayerState.PLAYING
+      youtubePlayerPlaying = true;
+      if (audioInitializedInTab && !state.musicMuted) {
+        postMusicCommand("unMute");
+      }
+    } else if (data.info === 0 || data.info === 2) { // ended or paused
+      youtubePlayerPlaying = false;
+    }
+  });
+
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible" && state.music.current) {
       if (!getMusicIframe()) {
         syncMusicPlayer(true);
+      } else if (youtubePlayerPlaying && audioInitializedInTab && !state.musicMuted) {
+        postMusicCommand("unMute");
+      } else {
+        scheduleMusicKeepAlive({
+          unmute: audioInitializedInTab && !state.musicMuted,
+          attempts: 4,
+          initialDelay: 60
+        });
       }
-      scheduleMusicKeepAlive({
-        unmute: audioInitializedInTab && !state.musicMuted,
-        attempts: 4,
-        initialDelay: 60
-      });
     }
   });
   window.addEventListener("pageshow", () => {
     if (state.music.current) {
       if (!getMusicIframe()) {
         syncMusicPlayer(true);
+      } else {
+        scheduleMusicKeepAlive({
+          unmute: audioInitializedInTab && !state.musicMuted,
+          attempts: 4,
+          initialDelay: 60
+        });
       }
-      scheduleMusicKeepAlive({
-        unmute: audioInitializedInTab && !state.musicMuted,
-        attempts: 4,
-        initialDelay: 60
-      });
     }
   });
   window.addEventListener("resize", scheduleResize);

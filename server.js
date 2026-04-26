@@ -154,7 +154,7 @@ function createRoom(roomId, durations = DEFAULT_DURATIONS) {
     clients: new Set(),
     history: [],
     messages: [],
-    todos: new Map()
+    focusTasks: new Map()
   };
   rooms.set(roomId, room);
   return room;
@@ -351,6 +351,17 @@ function snapshot(room, client = null) {
       current: room.music.current,
       queue: room.music.queue,
       maxPerUser: MAX_QUEUE_PER_USER
+    },
+    focusTasks: [...room.focusTasks.values()].map((entry) => ({
+      username: entry.username,
+      name: entry.name,
+      color: entry.color,
+      task: entry.task
+    }))
+  };
+}
+
+function handleFocusTaskMessage(client, message) {
     }
   };
 }
@@ -394,48 +405,14 @@ function handleStatusMessage(client, message) {
 function handleTodoMessage(client, message) {
   const room = client.room;
   const username = client.user.username;
+  const text = String(message.text || "").trim().slice(0, 120);
 
-  if (!room.todos.has(username)) {
-    room.todos.set(username, { username, name: client.participant.name, color: client.participant.color, tasks: [] });
+  if (!room.focusTasks.has(username)) {
+    room.focusTasks.set(username, { username, name: client.participant.name, color: client.participant.color, task: "" });
   }
-  const entry = room.todos.get(username);
-
-  switch (message.action) {
-    case "add": {
-      const text = String(message.text || "").trim().slice(0, 200);
-      if (!text) return false;
-      entry.tasks.push({ id: crypto.randomUUID(), text, done: false, forSession: false, createdAt: Date.now() });
-      return true;
-    }
-    case "edit": {
-      const task = entry.tasks.find((t) => t.id === message.id);
-      if (!task) return false;
-      const text = String(message.text || "").trim().slice(0, 200);
-      if (!text) return false;
-      task.text = text;
-      return true;
-    }
-    case "delete": {
-      const idx = entry.tasks.findIndex((t) => t.id === message.id);
-      if (idx === -1) return false;
-      entry.tasks.splice(idx, 1);
-      return true;
-    }
-    case "toggle": {
-      const task = entry.tasks.find((t) => t.id === message.id);
-      if (!task) return false;
-      task.done = !task.done;
-      return true;
-    }
-    case "session": {
-      const task = entry.tasks.find((t) => t.id === message.id);
-      if (!task) return false;
-      task.forSession = !task.forSession;
-      return true;
-    }
-    default:
-      return false;
-  }
+  const entry = room.focusTasks.get(username);
+  entry.task = text;
+  return true;
 }
 
 function createFrame(opcode, payload) {
@@ -726,6 +703,11 @@ function handleClientMessage(client, rawMessage) {
     client.participant.isHost = client.isHost;
     client.participant.lastSeen = Date.now();
     room.participants.set(client.id, client.participant);
+    if (room.focusTasks.has(client.user.username)) {
+      const ftEntry = room.focusTasks.get(client.user.username);
+      ftEntry.name = client.participant.name;
+      ftEntry.color = client.participant.color;
+    }
     broadcast(room);
     return;
   }
@@ -737,6 +719,8 @@ function handleClientMessage(client, rawMessage) {
     changed = handleChatMessage(client, message);
   } else if (message.type === "music") {
     changed = handleMusicMessage(client, message);
+  } else if (message.type === "focusTask") {
+    changed = handleFocusTaskMessage(client, message);
   } else if (message.type === "status") {
     changed = handleStatusMessage(client, message);
   }
@@ -1232,6 +1216,12 @@ function handleUpgrade(request, socket) {
   sockets.set(socket, client);
   room.clients.add(client);
   room.participants.set(id, participant);
+  if (!room.focusTasks.has(user.username)) {
+    room.focusTasks.set(user.username, { username: user.username, name: participant.name, color: participant.color, task: "" });
+  } else {
+    const ftEntry = room.focusTasks.get(user.username);
+    ftEntry.name = participant.name;
+    ftEntry.color = participant.color;
   room.presence.set(user.username, {
     statusText: participant.statusText,
     statusUpdatedAt: participant.statusUpdatedAt,

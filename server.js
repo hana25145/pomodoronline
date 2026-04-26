@@ -16,6 +16,9 @@ const PORT = Number(process.env.PORT || 5173);
 const MAX_CHAT_MESSAGES = 80;
 const MAX_HISTORY_ITEMS = 10;
 const MAX_QUEUE_PER_USER = 5;
+const STATUS_UPDATE_COOLDOWN = 10 * 60 * 1000;
+const WS_CLOSE_DUPLICATE_ACCOUNT = 4009;
+const WS_CLOSE_SESSION_REPLACED = 4010;
 
 const MIME_TYPES = {
   ".html": "text/html; charset=utf-8",
@@ -88,6 +91,20 @@ function normalizeDisplayName(value, fallback = "Guest") {
   return cleaned || fallback;
 }
 
+function normalizeStatusText(value) {
+  return String(value || "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .slice(0, 60);
+}
+
+function formatCooldown(milliseconds) {
+  const totalSeconds = Math.ceil(Math.max(0, milliseconds) / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
 function parseInitialDurations(searchParams) {
   const durations = { ...DEFAULT_DURATIONS };
 
@@ -133,6 +150,7 @@ function createRoom(roomId, durations = DEFAULT_DURATIONS) {
     music: createMusicState(),
     hostId: null,
     participants: new Map(),
+    presence: new Map(),
     clients: new Set(),
     history: [],
     messages: [],
@@ -142,8 +160,17 @@ function createRoom(roomId, durations = DEFAULT_DURATIONS) {
   return room;
 }
 
+function syncHostState(room) {
+  for (const client of room.clients) {
+    const isHost = client.id === room.hostId;
+    client.isHost = isHost;
+    client.participant.isHost = isHost;
+  }
+}
+
 function assignHostIfNeeded(room) {
   if (room.hostId && [...room.clients].some((c) => c.id === room.hostId)) {
+    syncHostState(room);
     return;
   }
 
@@ -155,12 +182,7 @@ function assignHostIfNeeded(room) {
 
   const newHost = clients[Math.floor(Math.random() * clients.length)];
   room.hostId = newHost.id;
-
-  for (const client of room.clients) {
-    client.isHost = client.id === room.hostId;
-    client.participant.isHost = client.isHost;
-  }
-
+  syncHostState(room);
   addHistory(room, newHost.participant.name, "is now the host");
 }
 
@@ -311,7 +333,9 @@ function snapshot(room, client = null) {
     viewer: client
       ? {
           username: client.user.username,
-          name: client.participant.name
+          name: client.participant.name,
+          statusText: client.participant.statusText || "",
+          statusCooldownUntil: client.participant.statusCooldownUntil || 0
         }
       : null,
     serverNow: now,
@@ -338,6 +362,47 @@ function snapshot(room, client = null) {
 }
 
 function handleFocusTaskMessage(client, message) {
+    }
+  };
+}
+
+function handleStatusMessage(client, message) {
+  const room = client.room;
+  const nextStatus = normalizeStatusText(message.text);
+  if (!nextStatus) {
+    sendToClient(client, { type: "notice", level: "error", text: "Status cannot be empty." });
+    return false;
+  }
+
+  if (nextStatus === (client.participant.statusText || "")) {
+    return false;
+  }
+
+  const now = Date.now();
+  const cooldownUntil = client.participant.statusCooldownUntil || 0;
+  if (cooldownUntil > now) {
+    sendToClient(client, {
+      type: "notice",
+      level: "error",
+      text: `You can update your status again in ${formatCooldown(cooldownUntil - now)}.`
+    });
+    return false;
+  }
+
+  client.participant.statusText = nextStatus;
+  client.participant.statusUpdatedAt = now;
+  client.participant.statusCooldownUntil = now + STATUS_UPDATE_COOLDOWN;
+  client.participant.lastSeen = now;
+  room.participants.set(client.id, client.participant);
+  room.presence.set(client.user.username, {
+    statusText: client.participant.statusText,
+    statusUpdatedAt: client.participant.statusUpdatedAt,
+    statusCooldownUntil: client.participant.statusCooldownUntil
+  });
+  return true;
+}
+
+function handleTodoMessage(client, message) {
   const room = client.room;
   const username = client.user.username;
   const text = String(message.text || "").trim().slice(0, 120);
@@ -350,29 +415,45 @@ function handleFocusTaskMessage(client, message) {
   return true;
 }
 
+function createFrame(opcode, payload) {
+  const data = Buffer.isBuffer(payload) ? payload : Buffer.from(payload);
+  let header;
+
+  if (data.length < 126) {
+    header = Buffer.from([0x80 | opcode, data.length]);
+  } else if (data.length < 65536) {
+    header = Buffer.alloc(4);
+    header[0] = 0x80 | opcode;
+    header[1] = 126;
+    header.writeUInt16BE(data.length, 2);
+  } else {
+    header = Buffer.alloc(10);
+    header[0] = 0x80 | opcode;
+    header[1] = 127;
+    header.writeBigUInt64BE(BigInt(data.length), 2);
+  }
+
+  return Buffer.concat([header, data]);
+}
+
 function sendFrame(socket, data) {
   if (socket.destroyed) {
     return;
   }
 
-  const payload = Buffer.from(data);
-  let header;
+  socket.write(createFrame(0x1, Buffer.from(data)));
+}
 
-  if (payload.length < 126) {
-    header = Buffer.from([0x81, payload.length]);
-  } else if (payload.length < 65536) {
-    header = Buffer.alloc(4);
-    header[0] = 0x81;
-    header[1] = 126;
-    header.writeUInt16BE(payload.length, 2);
-  } else {
-    header = Buffer.alloc(10);
-    header[0] = 0x81;
-    header[1] = 127;
-    header.writeBigUInt64BE(BigInt(payload.length), 2);
+function closeSocket(socket, code = 1000, reason = "") {
+  if (socket.destroyed) {
+    return;
   }
 
-  socket.write(Buffer.concat([header, payload]));
+  const reasonBuffer = Buffer.from(String(reason).slice(0, 120), "utf8");
+  const payload = Buffer.alloc(2 + reasonBuffer.length);
+  payload.writeUInt16BE(code, 0);
+  reasonBuffer.copy(payload, 2);
+  socket.end(createFrame(0x8, payload));
 }
 
 function sendToClient(client, payload) {
@@ -640,6 +721,8 @@ function handleClientMessage(client, rawMessage) {
     changed = handleMusicMessage(client, message);
   } else if (message.type === "focusTask") {
     changed = handleFocusTaskMessage(client, message);
+  } else if (message.type === "status") {
+    changed = handleStatusMessage(client, message);
   }
 
   if (changed) {
@@ -647,19 +730,28 @@ function handleClientMessage(client, rawMessage) {
   }
 }
 
-function removeClient(socket) {
+function removeClient(socket, options = {}) {
   const client = sockets.get(socket);
   if (!client) {
     return;
   }
 
+  const skipHistory = Boolean(options.skipHistory);
+  const skipBroadcast = Boolean(options.skipBroadcast);
+  const skipHostAssignment = Boolean(options.skipHostAssignment);
   const room = client.room;
   sockets.delete(socket);
   room.clients.delete(client);
   room.participants.delete(client.id);
-  addHistory(room, client.participant.name, "left quietly");
-  assignHostIfNeeded(room);
-  broadcast(room);
+  if (!skipHistory) {
+    addHistory(room, client.participant.name, "left quietly");
+  }
+  if (!skipHostAssignment) {
+    assignHostIfNeeded(room);
+  }
+  if (!skipBroadcast) {
+    broadcast(room);
+  }
 
   if (room.clients.size === 0) {
     setTimeout(() => {
@@ -1047,6 +1139,7 @@ function handleUpgrade(request, socket) {
 
   const roomId = normalizeRoom(url.searchParams.get("room"));
   const name = normalizeDisplayName(url.searchParams.get("name") || user.username, user.username);
+  const clientSessionId = String(url.searchParams.get("clientSessionId") || "").trim().slice(0, 120) || crypto.randomUUID();
   const room = getRoom(roomId);
 
   if (!room) {
@@ -1069,14 +1162,43 @@ function handleUpgrade(request, socket) {
     ""
   ].join("\r\n"));
 
+  const sameUserClients = [...room.clients].filter((client) => client.user.username === user.username);
+  const conflictingClients = sameUserClients.filter(
+    (client) => client.clientSessionId && client.clientSessionId !== clientSessionId
+  );
+
+  if (conflictingClients.length > 0) {
+    closeSocket(socket, WS_CLOSE_DUPLICATE_ACCOUNT, "duplicate-account");
+    return;
+  }
+
+  const replaceableClients = sameUserClients;
+  const inheritedJoinedAt = replaceableClients.length > 0
+    ? Math.min(...replaceableClients.map((client) => client.participant.joinedAt || Date.now()))
+    : Date.now();
+  const shouldKeepHost = replaceableClients.some((client) => client.id === room.hostId || client.isHost);
+
+  for (const existingClient of replaceableClients) {
+    removeClient(existingClient.socket, {
+      skipHistory: true,
+      skipBroadcast: true,
+      skipHostAssignment: true
+    });
+    closeSocket(existingClient.socket, WS_CLOSE_SESSION_REPLACED, "session-replaced");
+  }
+
   const id = crypto.randomUUID();
+  const savedPresence = room.presence.get(user.username) || {};
   const participant = {
     id,
     username: user.username,
     name,
     color: url.searchParams.get("color") || "tomato",
+    statusText: savedPresence.statusText || "",
+    statusUpdatedAt: savedPresence.statusUpdatedAt || 0,
+    statusCooldownUntil: savedPresence.statusCooldownUntil || 0,
     isHost: false,
-    joinedAt: Date.now(),
+    joinedAt: inheritedJoinedAt,
     lastSeen: Date.now()
   };
 
@@ -1085,6 +1207,7 @@ function handleUpgrade(request, socket) {
     room,
     user,
     socket,
+    clientSessionId,
     participant,
     isHost: false,
     buffer: Buffer.alloc(0)
@@ -1099,9 +1222,21 @@ function handleUpgrade(request, socket) {
     const ftEntry = room.focusTasks.get(user.username);
     ftEntry.name = participant.name;
     ftEntry.color = participant.color;
+  room.presence.set(user.username, {
+    statusText: participant.statusText,
+    statusUpdatedAt: participant.statusUpdatedAt,
+    statusCooldownUntil: participant.statusCooldownUntil
+  });
+  if (replaceableClients.length === 0) {
+    addHistory(room, name, "joined the room");
   }
-  addHistory(room, name, "joined the room");
-  assignHostIfNeeded(room);
+  if (shouldKeepHost) {
+    room.hostId = client.id;
+    syncHostState(room);
+  } else {
+    assignHostIfNeeded(room);
+  }
+  broadcast(room);
 
   socket.on("data", (chunk) => {
     client.buffer = Buffer.concat([client.buffer, chunk]);

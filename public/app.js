@@ -12,6 +12,11 @@ const DEFAULT_DURATIONS = {
   long: 15 * 60 * 1000
 };
 
+const STATUS_UPDATE_COOLDOWN_MS = 10 * 60 * 1000;
+const CLIENT_SESSION_KEY = "pmdr.clientSessionId";
+const SOCKET_CLOSE_DUPLICATE_ACCOUNT = 4009;
+const SOCKET_CLOSE_SESSION_REPLACED = 4010;
+
 const MODE_COPY = {
   focus: { label: "Focus", text: "Focus" },
   short: { label: "Short Break", text: "Short break" },
@@ -27,6 +32,17 @@ const STORAGE_KEYS = {
   focusTask: "pmdr.focusTask",
   savedMusic: "pmdr.savedMusic"
 };
+
+const CLIENT_SESSION_ID = (() => {
+  const existing = sessionStorage.getItem(CLIENT_SESSION_KEY);
+  if (existing) {
+    return existing;
+  }
+
+  const next = crypto.randomUUID();
+  sessionStorage.setItem(CLIENT_SESSION_KEY, next);
+  return next;
+})();
 
 const THEMES = {
   midnight: {
@@ -340,6 +356,10 @@ const state = {
   audioUnlocked: sessionStorage.getItem("pmdr.audioUnlocked") === "1",
   focusTasks: [],
   focusTaskPanelOpen: false
+  statusText: "",
+  statusCooldownUntil: 0,
+  todos: [],
+  todoPanelOpen: false
 };
 
 const elements = {
@@ -391,6 +411,10 @@ const elements = {
   settingsUsername: document.querySelector("#settingsUsername"),
   settingsLogoutButton: document.querySelector("#settingsLogoutButton"),
   roomCodeButton: document.querySelector("#roomCodeButton"),
+  statusForm: document.querySelector("#statusForm"),
+  statusInput: document.querySelector("#statusInput"),
+  statusSubmitButton: document.querySelector("#statusSubmitButton"),
+  statusLockText: document.querySelector("#statusLockText"),
   nameInput: document.querySelector("#nameInput"),
   colorRow: document.querySelector("#colorRow"),
   participantsBar: document.querySelector("#participantsBar"),
@@ -506,6 +530,20 @@ function normalizeName(value, fallback = "") {
     .slice(0, 24);
 
   return cleaned || fallback || "Maker";
+}
+
+function normalizeStatusText(value) {
+  return String(value || "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .slice(0, 60);
+}
+
+function formatCooldown(ms) {
+  const totalSeconds = Math.ceil(Math.max(0, ms) / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
 
 function clampMinutes(value, fallback) {
@@ -725,18 +763,179 @@ function getProgress() {
   return Math.min(1, Math.max(0, 1 - getRemaining() / duration));
 }
 
-function drawTimer(progress, t = 0) {
+const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+
+function clampUnit(value) {
+  return Math.min(1, Math.max(0, value));
+}
+
+function fract(value) {
+  return value - Math.floor(value);
+}
+
+function hashString(value) {
+  let hash = 2166136261;
+  for (let i = 0; i < value.length; i += 1) {
+    hash ^= value.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+function getMusicElapsedMs() {
+  if (!state.music.current?.startedAt) {
+    return 0;
+  }
+  return Math.max(0, Date.now() + state.serverOffset - state.music.current.startedAt);
+}
+
+function getMusicVisualState(t, musicElapsedMs = getMusicElapsedMs()) {
+  const current = state.music.current;
+  if (!current || !t) {
+    return null;
+  }
+
+  const seed = hashString(current.videoId || current.id || current.title || "music");
+  const bpm = 118 + (seed % 20);
+  const beat = (musicElapsedMs / 60000) * bpm;
+  const mainPulse = Math.pow(1 - fract(beat), 7);
+  const sidePulse = Math.pow(1 - fract(beat * 2), 9) * 0.58;
+  const drift = Math.sin((musicElapsedMs / 1000) * (1.6 + (seed % 7) * 0.08) + seed * 0.0009) * 0.5 + 0.5;
+  const shimmer = Math.sin((musicElapsedMs / 1000) * (3.4 + (seed % 5) * 0.14) + seed * 0.0017) * 0.5 + 0.5;
+  const energy = clampUnit(0.16 + drift * 0.2 + shimmer * 0.16 + mainPulse * 0.86 + sidePulse * 0.34);
+  const visibility = state.musicMuted && state.musicMuteTime > 0
+    ? clampUnit(1 - (t - state.musicMuteTime) / 1400)
+    : 1;
+
+  return {
+    seed,
+    beat,
+    energy,
+    mainPulse,
+    sidePulse,
+    visibility,
+    sweepAngle: beat * Math.PI * 0.18 + (seed % 360) * (Math.PI / 180),
+    orbitAngle: beat * Math.PI * 0.34 + (seed % 180) * (Math.PI / 180)
+  };
+}
+
+function drawReducedMotionMusicAura(cx, cy, radius, visual) {
+  context.save();
+  context.translate(cx, cy);
+  context.globalAlpha = 0.08 * visual.visibility;
+  context.strokeStyle = ringColors.progress || "oklch(72% 0.13 76)";
+  context.lineWidth = 2.5;
+  context.beginPath();
+  context.arc(0, 0, radius + 24, 0, Math.PI * 2);
+  context.stroke();
+  context.restore();
+}
+
+function drawMusicAura(cx, cy, radius, visual) {
+  const tau = Math.PI * 2;
+  const accent = ringColors.progress || "oklch(72% 0.13 76)";
+  const visibility = visual.visibility;
+  if (visibility <= 0.01) {
+    return;
+  }
+
+  context.save();
+  context.translate(cx, cy);
+
+  context.globalAlpha = (0.08 + visual.energy * 0.12) * visibility;
+  context.strokeStyle = accent;
+  context.shadowBlur = 22 + visual.mainPulse * 26;
+  context.shadowColor = accent;
+  context.lineWidth = 8 + visual.energy * 8;
+  context.beginPath();
+  context.arc(0, 0, radius + 18 + visual.mainPulse * 6, 0, tau);
+  context.stroke();
+  context.shadowBlur = 0;
+
+  const spokeCount = 28;
+  for (let i = 0; i < spokeCount; i += 1) {
+    const angle = (i / spokeCount) * tau + visual.orbitAngle * 0.45;
+    const spectral = Math.sin(angle * 3.2 + visual.beat * 0.92 + visual.seed * 0.002) * 0.5 + 0.5;
+    const flicker = Math.sin(visual.beat * 3.8 + i * 0.78 + visual.seed * 0.0011) * 0.5 + 0.5;
+    const intensity = clampUnit((0.18 + spectral * 0.5 + flicker * 0.32) * visual.energy) * visibility;
+    if (intensity < 0.05) {
+      continue;
+    }
+
+    const inner = radius + 16 + (i % 2) * 4;
+    const outer = inner + 8 + intensity * 32 + visual.mainPulse * 10;
+    context.globalAlpha = 0.07 + intensity * 0.32;
+    context.lineWidth = 1.2 + intensity * 2.4;
+    context.beginPath();
+    context.moveTo(Math.cos(angle) * inner, Math.sin(angle) * inner);
+    context.lineTo(Math.cos(angle) * outer, Math.sin(angle) * outer);
+    context.stroke();
+  }
+
+  for (let i = 0; i < 3; i += 1) {
+    const phase = fract(visual.beat * 0.5 + i * 0.24);
+    const waveRadius = radius + 18 + i * 10 + phase * (18 + visual.energy * 20);
+    const alpha = Math.pow(1 - phase, 2) * (0.2 - i * 0.04) * visibility;
+    if (alpha <= 0.01) {
+      continue;
+    }
+
+    context.globalAlpha = alpha;
+    context.lineWidth = 1.4 + visual.sidePulse * 2.2;
+    context.beginPath();
+    context.arc(0, 0, waveRadius, 0, tau);
+    context.stroke();
+  }
+
+  for (let i = 0; i < 2; i += 1) {
+    const sweepStart = visual.sweepAngle + i * Math.PI + Math.sin(visual.beat * 0.5 + i) * 0.1;
+    const sweepSize = 0.24 + visual.sidePulse * 0.18;
+    context.globalAlpha = (0.2 + visual.mainPulse * 0.2) * visibility;
+    context.lineWidth = 2 + visual.mainPulse * 2.4;
+    context.beginPath();
+    context.arc(0, 0, radius + 30 + i * 10, sweepStart, sweepStart + sweepSize);
+    context.stroke();
+  }
+
+  const particleCount = 10;
+  for (let i = 0; i < particleCount; i += 1) {
+    const angle = visual.orbitAngle * 0.9 + (i / particleCount) * tau;
+    const wobble = Math.sin(visual.beat * 0.8 + i + visual.seed * 0.001) * 8;
+    const distance = radius + 34 + wobble + visual.sidePulse * 6;
+    const x = Math.cos(angle) * distance;
+    const y = Math.sin(angle) * distance;
+    const size = 1 + ((i % 3) === 0 ? visual.mainPulse * 2.6 : visual.sidePulse * 1.5);
+    context.globalAlpha = (0.12 + size * 0.06) * visibility;
+    context.beginPath();
+    context.arc(x, y, size, 0, tau);
+    context.fillStyle = accent;
+    context.fill();
+  }
+
+  context.restore();
+}
+
+function drawTimer(progress, t = 0, musicElapsedMs = 0) {
   const width = canvasDrawWidth;
   const height = canvasDrawHeight;
   const cx = width / 2;
   const cy = height / 2;
   const radius = Math.min(width, height) * 0.40;
+  const visual = t > 0 && state.music.current ? getMusicVisualState(t, musicElapsedMs) : null;
 
   context.clearRect(0, 0, width, height);
 
+  if (visual) {
+    if (prefersReducedMotion.matches) {
+      drawReducedMotionMusicAura(cx, cy, radius, visual);
+    } else {
+      drawMusicAura(cx, cy, radius, visual);
+    }
+  }
+
   /* Ambient wave rings — shown when music is playing and not muted.
      On mute, each ring finishes its current cycle before disappearing. */
-  if (t > 0 && state.music.current) {
+  if (false && t > 0 && state.music.current) {
     context.save();
     context.translate(cx, cy);
     for (let i = 0; i < 4; i++) {
@@ -766,17 +965,20 @@ function drawTimer(progress, t = 0) {
 
   context.beginPath();
   context.strokeStyle = ringColors.track || "oklch(22% 0.016 62)";
-  context.lineWidth = 5;
+  context.lineWidth = visual ? 4.6 + visual.visibility * 0.6 : 5;
   context.arc(0, 0, radius, 0, Math.PI * 2);
   context.stroke();
 
   if (progress > 0) {
     context.beginPath();
     context.strokeStyle = ringColors.progress || "oklch(72% 0.13 76)";
-    context.lineWidth = 5;
+    context.lineWidth = visual ? 5 + visual.energy * 1.6 : 5;
     context.lineCap = "round";
+    context.shadowBlur = visual && !prefersReducedMotion.matches ? 14 + visual.mainPulse * 18 : 0;
+    context.shadowColor = ringColors.progress || "oklch(72% 0.13 76)";
     context.arc(0, 0, radius, 0, Math.PI * 2 * progress);
     context.stroke();
+    context.shadowBlur = 0;
   }
 
   context.restore();
@@ -806,7 +1008,7 @@ function resizeCanvas() {
   elements.canvas.height = Math.max(1, Math.floor(rect.height * ratio));
   context.setTransform(ratio, 0, 0, ratio, 0, 0);
   lastRenderedProgress = -1;
-  drawTimer(getProgress(), state.music.current ? performance.now() : 0);
+  drawTimer(getProgress(), state.music.current ? performance.now() : 0, getMusicElapsedMs());
 }
 
 let resizeScheduled = null;
@@ -1034,6 +1236,7 @@ function updateControls() {
 
   elements.settingsKicker.textContent = state.session === "solo" ? "Solo" : state.isHost ? "Host" : "Viewer";
   renderViewerBadge();
+  renderStatusComposer();
 }
 
 function applyTimerToUI() {
@@ -1057,23 +1260,67 @@ function applyTimerToUI() {
   updateSubline();
 }
 
+function renderStatusComposer(forceValue = false) {
+  if (!elements.statusInput || !elements.statusSubmitButton || !elements.statusLockText) {
+    return;
+  }
+
+  const isMulti = state.session === "multi" && Boolean(state.user);
+  const remaining = Math.max(0, state.statusCooldownUntil - Date.now());
+  const isLocked = isMulti && remaining > 0;
+
+  if (forceValue || document.activeElement !== elements.statusInput || isLocked) {
+    elements.statusInput.value = state.statusText;
+  }
+
+  elements.statusInput.disabled = !isMulti || isLocked;
+  elements.statusInput.placeholder = isMulti ? "What are you doing right now?" : "Join a room to share your status";
+  const draft = normalizeStatusText(elements.statusInput.value);
+  elements.statusSubmitButton.disabled = !isMulti || isLocked || !draft || draft === state.statusText;
+  elements.statusSubmitButton.textContent = isLocked ? formatCooldown(remaining) : "Update";
+  elements.statusLockText.textContent = !isMulti
+    ? ""
+    : isLocked
+      ? `Next update in ${formatCooldown(remaining)}`
+      : state.statusText
+        ? "Updating locks for 10 minutes."
+        : "Share what you're doing now.";
+  elements.statusLockText.classList.toggle("is-locked", isLocked);
+}
+
 function renderParticipants() {
   if (!elements.participantsBar) return;
   elements.participantsBar.innerHTML = "";
   if (state.session !== "multi") return;
 
   for (const participant of state.participants) {
-    const chip = document.createElement("span");
+    const chip = document.createElement("div");
     chip.className = `participant-chip${participant.isHost ? " is-host" : ""}`;
+
     const dot = document.createElement("span");
     dot.className = "participant-dot";
     dot.style.setProperty("--avatar", COLORS[participant.color] || COLORS.tomato);
+
+    const meta = document.createElement("div");
+    meta.className = "participant-meta";
+
     const name = document.createElement("span");
-    const isMe = participant.name === state.name;
+    name.className = "participant-name";
+    const isMe = participant.username && participant.username === state.user?.username;
     const hostTag = participant.isHost ? " (HOST)" : "";
     const youTag = isMe ? " (YOU)" : "";
     name.textContent = `${participant.name}${hostTag}${youTag}`;
-    chip.append(dot, name);
+
+    meta.append(name);
+
+    if (participant.statusText) {
+      const status = document.createElement("span");
+      status.className = "participant-doing";
+      status.textContent = `${participant.statusText} 하는 중`;
+      meta.append(status);
+    }
+
+    chip.append(dot, meta);
     elements.participantsBar.append(chip);
   }
 }
@@ -1278,6 +1525,8 @@ function applySnapshot(payload) {
   state.music = payload.music || { current: null, queue: [], maxPerUser: 5 };
   state.room = payload.room;
   state.isHost = Boolean(payload.isHost);
+  state.statusText = normalizeStatusText(payload.viewer?.statusText || "");
+  state.statusCooldownUntil = Number(payload.viewer?.statusCooldownUntil || 0);
   state.pendingRoomSetup = null;
   if (elements.roomCodeButton) {
     elements.roomCodeButton.textContent = payload.room;
@@ -1290,6 +1539,7 @@ function applySnapshot(payload) {
   state.focusTasks = payload.focusTasks || [];
   updateControls();
   applyTimerToUI();
+  renderStatusComposer(true);
   renderParticipants();
   renderHistory();
   renderChat();
@@ -1411,7 +1661,8 @@ function connect() {
     room: state.room,
     name: state.name,
     color: state.color,
-    token: state.authToken
+    token: state.authToken,
+    clientSessionId: CLIENT_SESSION_ID
   });
 
   if (state.pendingRoomSetup?.durations) {
@@ -1440,11 +1691,24 @@ function connect() {
     }
   });
 
-  socket.addEventListener("close", async () => {
+  socket.addEventListener("close", async (event) => {
     if (state.socket !== socket || state.session !== "multi") {
       return;
     }
     state.socket = null;
+
+    if (event.code === SOCKET_CLOSE_DUPLICATE_ACCOUNT) {
+      goHome();
+      elements.joinRoomMessage.textContent = "This account is already in the room on another tab or device.";
+      return;
+    }
+
+    if (event.code === SOCKET_CLOSE_SESSION_REPLACED) {
+      goHome();
+      elements.joinRoomMessage.textContent = "This room was taken over by a newer copy of this tab.";
+      return;
+    }
+
     try {
       await apiRequest(`/api/rooms/${encodeURIComponent(state.room)}`, { method: "GET" });
       state.reconnectTimer = setTimeout(connect, 1200);
@@ -1475,11 +1739,14 @@ function startSolo() {
     color: state.color,
     task: localStorage.getItem(STORAGE_KEYS.focusTask) || ""
   }];
+  state.statusText = "";
+  state.statusCooldownUntil = 0;
   setMusicMessage("");
   updateUrl();
   showTimerApp();
   updateControls();
   applyTimerToUI();
+  renderStatusComposer(true);
   renderParticipants();
   renderHistory();
   renderChat();
@@ -1515,6 +1782,8 @@ function startMulti(room, setup = null) {
   state.music = { current: null, queue: [], maxPerUser: 5 };
   state.musicResults = [];
   state.focusTasks = [];
+  state.statusText = "";
+  state.statusCooldownUntil = 0;
   setMusicMessage("");
   elements.roomCodeButton.textContent = nextRoom;
   elements.roomCodeButton.hidden = false;
@@ -1522,6 +1791,7 @@ function startMulti(room, setup = null) {
   showTimerApp();
   updateControls();
   applyTimerToUI();
+  renderStatusComposer(true);
   renderParticipants();
   renderHistory();
   renderChat();
@@ -1546,6 +1816,8 @@ function goHome() {
   state.music = { current: null, queue: [], maxPerUser: 5 };
   state.musicResults = [];
   state.focusTasks = [];
+  state.statusText = "";
+  state.statusCooldownUntil = 0;
   setMusicMessage("");
   updateUrl();
   showModePanel();
@@ -1865,6 +2137,29 @@ function bindEvents() {
     }
   });
 
+  elements.statusForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    if (state.session !== "multi") {
+      return;
+    }
+    const text = normalizeStatusText(elements.statusInput.value);
+    const remaining = Math.max(0, state.statusCooldownUntil - Date.now());
+    if (!text || remaining > 0 || text === state.statusText) {
+      renderStatusComposer();
+      return;
+    }
+    send({ type: "status", text });
+    state.statusText = text;
+    state.statusCooldownUntil = Date.now() + STATUS_UPDATE_COOLDOWN_MS;
+    renderStatusComposer(true);
+  });
+  elements.statusInput.addEventListener("input", () => renderStatusComposer());
+  elements.statusInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      elements.statusForm.requestSubmit();
+    }
+  });
+
   elements.roomCodeButton.addEventListener("click", async () => {
     const url = shareUrl();
     try {
@@ -1974,6 +2269,7 @@ function tick() {
   if (!elements.timerApp.hidden) {
     const remaining = getRemaining();
     const formatted = formatTime(remaining);
+    renderStatusComposer();
 
     if (formatted !== lastRenderedTime) {
       lastRenderedTime = formatted;
@@ -2002,7 +2298,7 @@ function tick() {
     }
     if (waveActive || Math.abs(progress - lastRenderedProgress) > 0.0002) {
       lastRenderedProgress = progress;
-      drawTimer(progress, waveActive ? performance.now() : 0);
+      drawTimer(progress, waveActive ? performance.now() : 0, getMusicElapsedMs());
     }
 
     if (state.noticeText && Date.now() > state.noticeUntil) {

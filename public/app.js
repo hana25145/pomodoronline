@@ -13,9 +13,6 @@ const DEFAULT_DURATIONS = {
 };
 
 const STATUS_UPDATE_COOLDOWN_MS = 10 * 60 * 1000;
-const CLIENT_SESSION_KEY = "pmdr.clientSessionId";
-const SOCKET_CLOSE_DUPLICATE_ACCOUNT = 4009;
-const SOCKET_CLOSE_SESSION_REPLACED = 4010;
 
 const MODE_COPY = {
   focus: { label: "Focus", text: "Focus" },
@@ -32,17 +29,6 @@ const STORAGE_KEYS = {
   focusTask: "pmdr.focusTask",
   savedMusic: "pmdr.savedMusic"
 };
-
-const CLIENT_SESSION_ID = (() => {
-  const existing = sessionStorage.getItem(CLIENT_SESSION_KEY);
-  if (existing) {
-    return existing;
-  }
-
-  const next = crypto.randomUUID();
-  sessionStorage.setItem(CLIENT_SESSION_KEY, next);
-  return next;
-})();
 
 const THEMES = {
   midnight: {
@@ -1661,8 +1647,7 @@ function connect() {
     room: state.room,
     name: state.name,
     color: state.color,
-    token: state.authToken,
-    clientSessionId: CLIENT_SESSION_ID
+    token: state.authToken
   });
 
   if (state.pendingRoomSetup?.durations) {
@@ -1691,24 +1676,11 @@ function connect() {
     }
   });
 
-  socket.addEventListener("close", async (event) => {
+  socket.addEventListener("close", async () => {
     if (state.socket !== socket || state.session !== "multi") {
       return;
     }
     state.socket = null;
-
-    if (event.code === SOCKET_CLOSE_DUPLICATE_ACCOUNT) {
-      goHome();
-      elements.joinRoomMessage.textContent = "This account is already in the room on another tab or device.";
-      return;
-    }
-
-    if (event.code === SOCKET_CLOSE_SESSION_REPLACED) {
-      goHome();
-      elements.joinRoomMessage.textContent = "This room was taken over by a newer copy of this tab.";
-      return;
-    }
-
     try {
       await apiRequest(`/api/rooms/${encodeURIComponent(state.room)}`, { method: "GET" });
       state.reconnectTimer = setTimeout(connect, 1200);

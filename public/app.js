@@ -341,7 +341,7 @@ const state = {
   playerKey: "",
   audioUnlocked: sessionStorage.getItem("pmdr.audioUnlocked") === "1",
   focusTasks: [],
-  focusTaskPanelOpen: false
+  focusTaskPanelOpen: false,
   statusText: "",
   statusCooldownUntil: 0,
   todos: [],

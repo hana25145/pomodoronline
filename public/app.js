@@ -1,10 +1,11 @@
-const COLORS = {
-  tomato: "oklch(61% 0.19 36)",
-  leaf: "oklch(55% 0.13 145)",
-  blue: "oklch(49% 0.15 248)",
-  plum: "oklch(42% 0.11 330)",
-  gold: "oklch(74% 0.15 83)"
+const LEGACY_COLORS = {
+  tomato: "#d95540",
+  leaf: "#2e9456",
+  blue: "#3a6cb8",
+  plum: "#7b3a88",
+  gold: "#c8a028"
 };
+const DEFAULT_COLOR = "#d95540";
 
 const DEFAULT_DURATIONS = {
   focus: 25 * 60 * 1000,
@@ -319,7 +320,7 @@ const state = {
   pendingRoomSetup: null,
   isHost: false,
   name: "",
-  color: localStorage.getItem(STORAGE_KEYS.color) || "tomato",
+  color: (() => { const s = localStorage.getItem(STORAGE_KEYS.color) || ""; return LEGACY_COLORS[s] || (s.startsWith("#") ? s : DEFAULT_COLOR); })(),
   theme: localStorage.getItem(STORAGE_KEYS.theme) || "crimson",
   timer: createTimerState(),
   serverOffset: 0,
@@ -607,22 +608,19 @@ function renderViewerBadge() {
 
 function renderColorDots() {
   elements.colorRow.innerHTML = "";
-  for (const [key, value] of Object.entries(COLORS)) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = `color-dot${key === state.color ? " is-active" : ""}`;
-    button.style.setProperty("--swatch", value);
-    button.setAttribute("aria-label", `${key} color`);
-    button.addEventListener("click", () => {
-      state.color = key;
-      localStorage.setItem(STORAGE_KEYS.color, key);
-      renderColorDots();
-      if (state.session === "multi") {
-        sendHello();
-      }
-    });
-    elements.colorRow.append(button);
-  }
+  const input = document.createElement("input");
+  input.type = "color";
+  input.className = "color-hex-input";
+  input.value = state.color.startsWith("#") ? state.color : DEFAULT_COLOR;
+  input.setAttribute("aria-label", "Tag color");
+  input.addEventListener("input", () => {
+    state.color = input.value;
+    localStorage.setItem(STORAGE_KEYS.color, input.value);
+    if (state.session === "multi") {
+      sendHello();
+    }
+  });
+  elements.colorRow.append(input);
 }
 
 function showAuthPanel() {
@@ -1285,7 +1283,7 @@ function renderParticipants() {
 
     const dot = document.createElement("span");
     dot.className = "participant-dot";
-    dot.style.setProperty("--avatar", COLORS[participant.color] || COLORS.tomato);
+    dot.style.setProperty("--avatar", LEGACY_COLORS[participant.color] || participant.color || DEFAULT_COLOR);
 
     const meta = document.createElement("div");
     meta.className = "participant-meta";
@@ -1948,7 +1946,7 @@ function renderFocusTasks() {
 
     const dot = document.createElement("span");
     dot.className = "focus-task-dot";
-    dot.style.setProperty("--dot-color", COLORS[entry.color] || COLORS.tomato);
+    dot.style.setProperty("--dot-color", LEGACY_COLORS[entry.color] || entry.color || DEFAULT_COLOR);
 
     const nameEl = document.createElement("span");
     nameEl.className = "focus-task-name";

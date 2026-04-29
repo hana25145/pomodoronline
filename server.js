@@ -1144,7 +1144,7 @@ function handleUpgrade(request, socket) {
     id,
     username: user.username,
     name,
-    color: url.searchParams.get("color") || "tomato",
+    color: url.searchParams.get("color") || "#d95540",
     statusText: savedPresence.statusText || "",
     statusUpdatedAt: savedPresence.statusUpdatedAt || 0,
     statusCooldownUntil: savedPresence.statusCooldownUntil || 0,

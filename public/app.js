@@ -342,11 +342,17 @@ const state = {
   playerKey: "",
   audioUnlocked: sessionStorage.getItem("pmdr.audioUnlocked") === "1",
   focusTasks: [],
-  focusTaskPanelOpen: false
+  focusTaskPanelOpen: false,
   statusText: "",
   statusCooldownUntil: 0,
   todos: [],
-  todoPanelOpen: false
+  todoPanelOpen: false,
+  groups: [],
+  currentGroup: null,
+  pendingGroupFromUrl: "",
+  createRoomGroupId: null,
+  sessionVotes: [],
+  sessionVoteSubmitted: false
 };
 
 const elements = {
@@ -363,10 +369,18 @@ const elements = {
   authMessage: document.querySelector("#authMessage"),
   accountBadge: document.querySelector("#accountBadge"),
   entryLogoutButton: document.querySelector("#entryLogoutButton"),
-  createRoomButton: document.querySelector("#createRoomButton"),
-  joinRoomForm: document.querySelector("#joinRoomForm"),
-  joinRoomInput: document.querySelector("#joinRoomInput"),
-  joinRoomMessage: document.querySelector("#joinRoomMessage"),
+  groupApp: document.querySelector("#groupApp"),
+  groupBackButton: document.querySelector("#groupBackButton"),
+  groupTitle: document.querySelector("#groupTitle"),
+  groupInviteButton: document.querySelector("#groupInviteButton"),
+  groupCreateRoomButton: document.querySelector("#groupCreateRoomButton"),
+  groupRoomsList: document.querySelector("#groupRoomsList"),
+  groupMembersList: document.querySelector("#groupMembersList"),
+  groupsList: document.querySelector("#groupsList"),
+  newGroupButton: document.querySelector("#newGroupButton"),
+  newGroupForm: document.querySelector("#newGroupForm"),
+  newGroupInput: document.querySelector("#newGroupInput"),
+  newGroupMessage: document.querySelector("#newGroupMessage"),
   createRoomDialog: document.querySelector("#createRoomDialog"),
   closeCreateRoomButton: document.querySelector("#closeCreateRoomButton"),
   createRoomForm: document.querySelector("#createRoomForm"),
@@ -442,7 +456,15 @@ const elements = {
   focusTaskPanel: document.querySelector("#focusTaskPanel"),
   focusTaskPanelTab: document.querySelector("#focusTaskPanelTab"),
   focusTaskList: document.querySelector("#focusTaskList"),
-  focusTaskPreview: document.querySelector("#focusTaskPreview")
+  focusTaskPreview: document.querySelector("#focusTaskPreview"),
+  sessionGoalDialog: document.querySelector("#sessionGoalDialog"),
+  sessionGoalForm: document.querySelector("#sessionGoalForm"),
+  sessionGoalInput: document.querySelector("#sessionGoalInput"),
+  sessionCompleteDialog: document.querySelector("#sessionCompleteDialog"),
+  sessionCompleteGoal: document.querySelector("#sessionCompleteGoal"),
+  sessionCompleteYes: document.querySelector("#sessionCompleteYes"),
+  sessionCompleteNo: document.querySelector("#sessionCompleteNo"),
+  sessionVoteList: document.querySelector("#sessionVoteList")
 };
 
 const context = elements.canvas.getContext("2d");
@@ -632,6 +654,7 @@ function showAuthPanel() {
   elements.authPanel.hidden = false;
   elements.modePanel.hidden = true;
   elements.timerApp.hidden = true;
+  elements.groupApp.hidden = true;
 }
 
 function showModePanel() {
@@ -643,13 +666,124 @@ function showModePanel() {
   elements.authPanel.hidden = true;
   elements.modePanel.hidden = false;
   elements.timerApp.hidden = true;
+  elements.groupApp.hidden = true;
   renderViewerBadge();
+  fetchGroups();
 }
 
 function showTimerApp() {
   elements.entryScreen.hidden = true;
   elements.timerApp.hidden = false;
+  elements.groupApp.hidden = true;
   requestAnimationFrame(resizeCanvas);
+}
+
+function showGroupApp() {
+  closeAllDialogs(false);
+  disconnect();
+  clearMusicPlayer();
+  state.session = "entry";
+  elements.entryScreen.hidden = true;
+  elements.timerApp.hidden = true;
+  elements.groupApp.hidden = false;
+}
+
+async function fetchGroups() {
+  if (!state.user) return;
+  try {
+    const data = await apiRequest("/api/groups", { method: "GET" });
+    state.groups = data.groups || [];
+  } catch {
+    state.groups = [];
+  }
+  renderGroupsList();
+}
+
+function renderGroupsList() {
+  elements.groupsList.innerHTML = "";
+  if (state.groups.length === 0) {
+    const empty = document.createElement("li");
+    empty.className = "groups-empty";
+    empty.textContent = "No groups yet — create one to get started.";
+    elements.groupsList.append(empty);
+    return;
+  }
+  for (const group of state.groups) {
+    const li = document.createElement("li");
+    li.className = "group-list-item";
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "group-list-button";
+    const nameSpan = document.createElement("span");
+    nameSpan.className = "group-list-name";
+    nameSpan.textContent = group.name;
+    const arrow = document.createElement("span");
+    arrow.className = "group-list-arrow";
+    arrow.textContent = "→";
+    btn.append(nameSpan, arrow);
+    btn.addEventListener("click", () => openGroupPage(group.id));
+    li.append(btn);
+    elements.groupsList.append(li);
+  }
+}
+
+async function openGroupPage(groupId) {
+  try {
+    const data = await apiRequest(`/api/groups/${encodeURIComponent(groupId)}`, { method: "GET" });
+    state.currentGroup = data.group;
+    showGroupApp();
+    renderGroupPage(data);
+  } catch {
+    await fetchGroups();
+  }
+}
+
+function renderGroupPage(data) {
+  const { group, activeRooms } = data;
+  elements.groupTitle.textContent = group.name;
+
+  elements.groupMembersList.innerHTML = "";
+  for (const username of group.members) {
+    const li = document.createElement("li");
+    li.className = "group-member-item";
+    const dot = document.createElement("span");
+    dot.className = "group-member-dot";
+    const nameEl = document.createElement("span");
+    nameEl.className = "group-member-name";
+    nameEl.textContent = username;
+    if (username === state.user?.username) nameEl.classList.add("is-you");
+    li.append(dot, nameEl);
+    elements.groupMembersList.append(li);
+  }
+
+  elements.groupRoomsList.innerHTML = "";
+  if (!activeRooms || activeRooms.length === 0) {
+    const empty = document.createElement("li");
+    empty.className = "group-rooms-empty";
+    empty.textContent = "No active rooms. Create one to start a session.";
+    elements.groupRoomsList.append(empty);
+    return;
+  }
+  for (const room of activeRooms) {
+    const li = document.createElement("li");
+    li.className = "group-room-item";
+    const info = document.createElement("div");
+    info.className = "group-room-info";
+    const nameEl = document.createElement("span");
+    nameEl.className = "group-room-name";
+    nameEl.textContent = room.id;
+    const countEl = document.createElement("span");
+    countEl.className = "group-room-count";
+    countEl.textContent = `${room.participantCount} online`;
+    info.append(nameEl, countEl);
+    const joinBtn = document.createElement("button");
+    joinBtn.type = "button";
+    joinBtn.className = "entry-button group-room-join-btn";
+    joinBtn.textContent = "Join";
+    joinBtn.addEventListener("click", () => startMulti(room.id));
+    li.append(info, joinBtn);
+    elements.groupRoomsList.append(li);
+  }
 }
 
 function openDialog(dialog) {
@@ -667,6 +801,8 @@ function closeDialog(dialog) {
 function closeAllDialogs(restoreFocus = false) {
   closeDialog(elements.createRoomDialog);
   closeDialog(elements.settingsDialog);
+  closeDialog(elements.sessionGoalDialog);
+  closeDialog(elements.sessionCompleteDialog);
   if (restoreFocus && !elements.timerApp.hidden) {
     elements.homeButton.focus();
   }
@@ -1495,9 +1631,11 @@ function renderMusic() {
 }
 
 let lastKnownMode = null;
+let lastKnownStatus = null;
 
 function applySnapshot(payload) {
   const prevMode = lastKnownMode;
+  const prevStatus = lastKnownStatus;
   state.serverOffset = payload.serverNow - Date.now();
   state.timer = {
     ...payload.timer,
@@ -1518,9 +1656,25 @@ function applySnapshot(payload) {
   }
 
   lastKnownMode = state.timer.mode;
+  lastKnownStatus = state.timer.status;
   if (prevMode !== null && prevMode !== state.timer.mode) playBell();
 
   state.focusTasks = payload.focusTasks || [];
+  state.sessionVotes = payload.sessionVotes || [];
+
+  const focusSessionEnded = prevMode === "focus" && prevStatus === "running" && state.timer.mode !== "focus";
+  const newFocusSessionStarted = prevMode !== null && prevMode !== "focus" && state.timer.mode === "focus";
+
+  if (focusSessionEnded && state.session === "multi") {
+    state.sessionVoteSubmitted = false;
+    elements.sessionCompleteGoal.textContent = state.statusText ? `"${state.statusText}"` : "";
+    openDialog(elements.sessionCompleteDialog);
+  }
+  if (newFocusSessionStarted) {
+    closeDialog(elements.sessionCompleteDialog);
+    state.sessionVoteSubmitted = false;
+  }
+
   updateControls();
   applyTimerToUI();
   renderStatusComposer(true);
@@ -1529,6 +1683,7 @@ function applySnapshot(payload) {
   renderChat();
   renderMusic();
   renderFocusTasks();
+  renderSessionVotes();
   syncMusicPlayer();
 }
 
@@ -1684,7 +1839,6 @@ function connect() {
       state.reconnectTimer = setTimeout(connect, 1200);
     } catch {
       goHome();
-      elements.joinRoomMessage.textContent = "Room no longer exists.";
     }
   });
 }
@@ -1729,7 +1883,6 @@ async function joinRoom(room) {
     await apiRequest(`/api/rooms/${encodeURIComponent(room)}`, { method: "GET" });
   } catch {
     showModePanel();
-    elements.joinRoomMessage.textContent = "Room not found.";
     return;
   }
   startMulti(room);
@@ -1811,8 +1964,9 @@ async function logout() {
 }
 
 async function restoreSession() {
-  const roomFromUrl = sanitizeRoom(new URLSearchParams(window.location.search).get("room"));
-  state.pendingRoomFromUrl = roomFromUrl;
+  const params = new URLSearchParams(window.location.search);
+  const groupFromUrl = String(params.get("joinGroup") || "").trim();
+  state.pendingGroupFromUrl = groupFromUrl;
 
   if (!state.authToken) {
     showAuthPanel();
@@ -1826,8 +1980,8 @@ async function restoreSession() {
     elements.nameInput.value = state.name;
     renderViewerBadge();
 
-    if (state.pendingRoomFromUrl) {
-      await joinRoom(state.pendingRoomFromUrl);
+    if (state.pendingGroupFromUrl) {
+      await handlePendingGroupJoin();
     } else {
       showModePanel();
     }
@@ -1836,6 +1990,21 @@ async function restoreSession() {
     state.authToken = "";
     state.user = null;
     showAuthPanel();
+  }
+}
+
+async function handlePendingGroupJoin() {
+  const groupId = state.pendingGroupFromUrl;
+  state.pendingGroupFromUrl = "";
+  try {
+    await apiRequest(`/api/groups/${encodeURIComponent(groupId)}/join`, { method: "POST" });
+    const data = await apiRequest(`/api/groups/${encodeURIComponent(groupId)}`, { method: "GET" });
+    state.currentGroup = data.group;
+    showGroupApp();
+    renderGroupPage(data);
+    history.replaceState({}, "", window.location.pathname);
+  } catch {
+    showModePanel();
   }
 }
 
@@ -1860,8 +2029,8 @@ async function handleAuthSubmit(event) {
     setAuthMessage("");
     renderViewerBadge();
 
-    if (state.pendingRoomFromUrl) {
-      await joinRoom(state.pendingRoomFromUrl);
+    if (state.pendingGroupFromUrl) {
+      await handlePendingGroupJoin();
     } else {
       showModePanel();
     }
@@ -1997,6 +2166,44 @@ function renderFocusTasks() {
   }
 }
 
+function renderSessionVotes() {
+  if (!elements.sessionVoteList) return;
+  const isBreak = state.session === "multi" && state.timer.mode !== "focus";
+  const hasVotes = state.sessionVotes.length > 0;
+  const show = isBreak || hasVotes;
+  elements.sessionVoteList.hidden = !show;
+  if (!show) return;
+
+  const voteMap = new Map(state.sessionVotes.map((v) => [v.username, v]));
+  elements.sessionVoteList.innerHTML = "";
+
+  for (const p of state.participants) {
+    const li = document.createElement("li");
+    li.className = "session-vote-item";
+
+    const dot = document.createElement("span");
+    dot.className = "session-vote-dot";
+    dot.style.background = p.color || "var(--surface-strong)";
+
+    const name = document.createElement("span");
+    name.className = "session-vote-name";
+    name.textContent = p.name;
+
+    const badge = document.createElement("span");
+    const vote = voteMap.get(p.username);
+    if (vote) {
+      badge.className = `session-vote-badge ${vote.vote === "yes" ? "is-yes" : "is-no"}`;
+      badge.textContent = vote.vote === "yes" ? "✓ Done" : "✗ Not yet";
+    } else {
+      badge.className = "session-vote-badge is-pending";
+      badge.textContent = "…";
+    }
+
+    li.append(dot, name, badge);
+    elements.sessionVoteList.append(li);
+  }
+}
+
 function bindDialogBackdrop(dialog, closeFn) {
   dialog.addEventListener("click", (event) => {
     if (event.target === dialog) {
@@ -2012,9 +2219,48 @@ function bindEvents() {
   elements.authForm.addEventListener("submit", handleAuthSubmit);
   elements.entryLogoutButton.addEventListener("click", logout);
 
-  elements.createRoomButton.addEventListener("click", () => {
+  elements.groupBackButton.addEventListener("click", () => {
+    state.currentGroup = null;
+    showModePanel();
+  });
+
+  elements.groupInviteButton.addEventListener("click", () => {
+    if (!state.currentGroup) return;
+    const url = new URL(window.location.href);
+    url.search = "";
+    url.searchParams.set("joinGroup", state.currentGroup.id);
+    navigator.clipboard.writeText(url.toString()).then(() => {
+      elements.groupInviteButton.textContent = "Copied!";
+      setTimeout(() => { elements.groupInviteButton.textContent = "Copy invite"; }, 2000);
+    });
+  });
+
+  elements.groupCreateRoomButton.addEventListener("click", () => {
+    if (!state.currentGroup) return;
+    state.createRoomGroupId = state.currentGroup.id;
     prepareCreateRoomDialog();
     openDialog(elements.createRoomDialog);
+  });
+
+  elements.newGroupButton.addEventListener("click", () => {
+    elements.newGroupForm.hidden = !elements.newGroupForm.hidden;
+    if (!elements.newGroupForm.hidden) elements.newGroupInput.focus();
+  });
+
+  elements.newGroupForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const name = elements.newGroupInput.value.trim();
+    if (!name) return;
+    elements.newGroupMessage.textContent = "";
+    try {
+      const data = await apiRequest("/api/groups", { method: "POST", body: JSON.stringify({ name }) });
+      state.groups.push(data.group);
+      elements.newGroupInput.value = "";
+      elements.newGroupForm.hidden = true;
+      renderGroupsList();
+    } catch (error) {
+      elements.newGroupMessage.textContent = error.message || "Could not create group.";
+    }
   });
 
   elements.createRoomForm.addEventListener("submit", async (event) => {
@@ -2031,6 +2277,7 @@ function bindEvents() {
         method: "POST",
         body: JSON.stringify({
           room,
+          groupId: state.createRoomGroupId,
           focus: durations.focus / 60_000,
           short: durations.short / 60_000,
           long: durations.long / 60_000
@@ -2045,24 +2292,13 @@ function bindEvents() {
     state.name = normalizeName(elements.createNameInput.value || state.user?.username, state.user?.username || "Maker");
     elements.nameInput.value = state.name;
     localStorage.setItem(STORAGE_KEYS.displayName, state.name);
+    state.createRoomGroupId = null;
     closeDialog(elements.createRoomDialog);
     startMulti(room, { durations });
   });
 
   elements.closeCreateRoomButton.addEventListener("click", () => closeDialog(elements.createRoomDialog));
   bindDialogBackdrop(elements.createRoomDialog, () => closeDialog(elements.createRoomDialog));
-
-  elements.joinRoomForm.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const room = sanitizeRoom(elements.joinRoomInput.value);
-    if (!room) {
-      elements.joinRoomMessage.textContent = "Enter a valid room code.";
-      return;
-    }
-    elements.joinRoomMessage.textContent = "";
-    elements.joinRoomInput.value = "";
-    await joinRoom(room);
-  });
 
   elements.settingsButton.addEventListener("click", () => openDialog(elements.settingsDialog));
   elements.closeSettingsButton.addEventListener("click", () => closeDialog(elements.settingsDialog));
@@ -2079,8 +2315,46 @@ function bindEvents() {
   elements.musicMuteButton.addEventListener("click", () => setMusicMuted(!state.musicMuted));
 
   elements.startPauseButton.addEventListener("click", () => {
-    sendTimerCommand(state.timer.status === "running" ? "pause" : "start");
+    if (state.timer.status !== "running" && state.timer.mode === "focus") {
+      const current = state.statusText || localStorage.getItem(STORAGE_KEYS.focusTask) || "";
+      elements.sessionGoalInput.value = current;
+      openDialog(elements.sessionGoalDialog);
+      requestAnimationFrame(() => {
+        elements.sessionGoalInput.select();
+        elements.sessionGoalInput.focus();
+      });
+    } else {
+      sendTimerCommand(state.timer.status === "running" ? "pause" : "start");
+    }
   });
+
+  elements.sessionGoalForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const goal = normalizeStatusText(elements.sessionGoalInput.value);
+    if (!goal) {
+      elements.sessionGoalInput.focus();
+      return;
+    }
+    localStorage.setItem(STORAGE_KEYS.focusTask, goal);
+    if (state.session === "multi") {
+      send({ type: "status", text: goal });
+      state.statusText = goal;
+      renderStatusComposer();
+    }
+    closeDialog(elements.sessionGoalDialog);
+    sendTimerCommand("start");
+  });
+
+  bindDialogBackdrop(elements.sessionGoalDialog, () => closeDialog(elements.sessionGoalDialog));
+
+  function submitSessionVote(vote) {
+    if (state.sessionVoteSubmitted) return;
+    state.sessionVoteSubmitted = true;
+    send({ type: "session-vote", vote });
+    closeDialog(elements.sessionCompleteDialog);
+  }
+  elements.sessionCompleteYes.addEventListener("click", () => submitSessionVote("yes"));
+  elements.sessionCompleteNo.addEventListener("click", () => submitSessionVote("no"));
   elements.resetButton.addEventListener("click", () => sendTimerCommand("reset"));
   elements.modeButtons.forEach((button) => {
     button.addEventListener("click", () => sendTimerCommand("mode", { mode: button.dataset.mode }));

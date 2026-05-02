@@ -12,6 +12,7 @@ const dataDir = process.env.DATA_DIR
   ? path.resolve(process.env.DATA_DIR)
   : path.join(__dirname, "data");
 const usersFile = path.join(dataDir, "users.json");
+const groupsFile = path.join(dataDir, "groups.json");
 const PORT = Number(process.env.PORT || 5173);
 const MAX_CHAT_MESSAGES = 80;
 const MAX_HISTORY_ITEMS = 10;
@@ -36,6 +37,7 @@ const DEFAULT_DURATIONS = {
 };
 
 const users = loadUsers();
+const groups = loadGroups();
 const authTokens = new Map();
 const rooms = new Map();
 const sockets = new Map();
@@ -61,6 +63,26 @@ function loadUsers() {
 function persistUsers() {
   ensureDataDir();
   fs.writeFileSync(usersFile, JSON.stringify([...users.values()], null, 2));
+}
+
+function loadGroups() {
+  ensureDataDir();
+  if (!fs.existsSync(groupsFile)) return new Map();
+  try {
+    const raw = JSON.parse(fs.readFileSync(groupsFile, "utf8"));
+    return new Map(raw.map((g) => [g.id, g]));
+  } catch {
+    return new Map();
+  }
+}
+
+function persistGroups() {
+  ensureDataDir();
+  fs.writeFileSync(groupsFile, JSON.stringify([...groups.values()], null, 2));
+}
+
+function sanitizeGroup(group) {
+  return { id: group.id, name: group.name, createdBy: group.createdBy, createdAt: group.createdAt, members: [...group.members] };
 }
 
 function normalizeUsername(value) {
@@ -140,10 +162,11 @@ function getRoom(roomId) {
   return rooms.get(roomId) || null;
 }
 
-function createRoom(roomId, durations = DEFAULT_DURATIONS) {
+function createRoom(roomId, durations = DEFAULT_DURATIONS, groupId = null) {
   const room = {
     id: roomId,
     createdAt: Date.now(),
+    groupId,
     timer: createTimerState(durations),
     music: createMusicState(),
     hostId: null,
@@ -152,7 +175,8 @@ function createRoom(roomId, durations = DEFAULT_DURATIONS) {
     clients: new Set(),
     history: [],
     messages: [],
-    focusTasks: new Map()
+    focusTasks: new Map(),
+    sessionVotes: new Map()
   };
   rooms.set(roomId, room);
   return room;
@@ -268,6 +292,7 @@ function transitionTimer(room) {
   } else {
     timer.cycle += 1;
     setTimerMode(timer, "focus", "Timer");
+    room.sessionVotes.clear();
   }
 
   addHistory(room, "Timer", timer.mode === "focus" ? `Cycle ${timer.cycle} focus ready` : `${timer.mode === "long" ? "Long" : "Short"} break ready`);
@@ -351,7 +376,8 @@ function snapshot(room, client = null) {
       name: entry.name,
       color: entry.color,
       task: entry.task
-    }))
+    })),
+    sessionVotes: [...room.sessionVotes.values()]
   };
 }
 
@@ -400,6 +426,18 @@ function handleStatusMessage(client, message) {
     statusText: client.participant.statusText,
     statusUpdatedAt: client.participant.statusUpdatedAt,
     statusCooldownUntil: client.participant.statusCooldownUntil
+  });
+  return true;
+}
+
+function handleSessionVoteMessage(client, message) {
+  const room = client.room;
+  const vote = message.vote === "yes" ? "yes" : "no";
+  room.sessionVotes.set(client.user.username, {
+    username: client.user.username,
+    name: client.participant.name,
+    color: client.participant.color,
+    vote
   });
   return true;
 }
@@ -523,6 +561,7 @@ function handleTimerCommand(client, message) {
       timer.startedAt = now;
       timer.lastUpdatedBy = actor;
       addHistory(room, actor, "started the timer");
+      if (timer.mode === "focus") room.sessionVotes.clear();
       break;
     case "pause":
       timer.remainingMs = currentRemaining(timer, now);
@@ -709,6 +748,8 @@ function handleClientMessage(client, rawMessage) {
     changed = handleFocusTaskMessage(client, message);
   } else if (message.type === "status") {
     changed = handleStatusMessage(client, message);
+  } else if (message.type === "session-vote") {
+    changed = handleSessionVoteMessage(client, message);
   }
 
   if (changed) {
@@ -988,6 +1029,79 @@ async function handleYoutubeSearchRequest(request, response, url) {
   return true;
 }
 
+async function handleGroupRequest(request, response, url) {
+  if (!url.pathname.startsWith("/api/groups")) return false;
+
+  const user = getUserFromToken(extractToken(request));
+  if (!user) {
+    sendJson(response, 401, { error: "Unauthorized" });
+    return true;
+  }
+
+  if (request.method === "GET" && url.pathname === "/api/groups") {
+    const userGroups = [...groups.values()].filter((g) => g.members.includes(user.username));
+    sendJson(response, 200, { groups: userGroups.map(sanitizeGroup) });
+    return true;
+  }
+
+  if (request.method === "POST" && url.pathname === "/api/groups") {
+    const rawBody = await readRequestBody(request);
+    const body = rawBody ? JSON.parse(rawBody) : {};
+    const name = String(body.name || "").trim().slice(0, 40);
+    if (!name) {
+      sendJson(response, 400, { error: "Group name is required." });
+      return true;
+    }
+    const id = `grp-${crypto.randomBytes(6).toString("hex")}`;
+    const group = { id, name, createdBy: user.username, createdAt: Date.now(), members: [user.username] };
+    groups.set(id, group);
+    persistGroups();
+    sendJson(response, 201, { group: sanitizeGroup(group) });
+    return true;
+  }
+
+  const joinMatch = url.pathname.match(/^\/api\/groups\/([^/]+)\/join$/);
+  if (joinMatch && request.method === "POST") {
+    const groupId = joinMatch[1];
+    const group = groups.get(groupId);
+    if (!group) {
+      sendJson(response, 404, { error: "Group not found." });
+      return true;
+    }
+    if (!group.members.includes(user.username)) {
+      group.members.push(user.username);
+      persistGroups();
+    }
+    sendJson(response, 200, { group: sanitizeGroup(group) });
+    return true;
+  }
+
+  const getMatch = url.pathname.match(/^\/api\/groups\/([^/]+)$/);
+  if (getMatch && request.method === "GET") {
+    const groupId = getMatch[1];
+    const group = groups.get(groupId);
+    if (!group) {
+      sendJson(response, 404, { error: "Group not found." });
+      return true;
+    }
+    if (!group.members.includes(user.username)) {
+      sendJson(response, 403, { error: "Not a member of this group." });
+      return true;
+    }
+    const activeRooms = [...rooms.values()]
+      .filter((r) => r.groupId === groupId)
+      .map((r) => ({
+        id: r.id,
+        participantCount: r.participants.size,
+        participants: [...r.participants.values()].map((p) => ({ name: p.name, color: p.color }))
+      }));
+    sendJson(response, 200, { group: sanitizeGroup(group), activeRooms });
+    return true;
+  }
+
+  return false;
+}
+
 function serveStatic(request, response, url) {
   const requestedPath = decodeURIComponent(url.pathname);
   const safePath = requestedPath === "/" ? "/index.html" : requestedPath;
@@ -1030,6 +1144,10 @@ async function handleHttpRequest(request, response) {
       return;
     }
 
+    if (await handleGroupRequest(request, response, url)) {
+      return;
+    }
+
     if (await handleYoutubeSearchRequest(request, response, url)) {
       return;
     }
@@ -1051,9 +1169,18 @@ async function handleHttpRequest(request, response) {
         sendJson(response, 409, { error: "Room already exists." });
         return;
       }
+      const groupId = String(body.groupId || "");
+      if (!groupId || !groups.has(groupId)) {
+        sendJson(response, 400, { error: "A valid group is required to create a room." });
+        return;
+      }
+      if (!groups.get(groupId).members.includes(user.username)) {
+        sendJson(response, 403, { error: "You are not a member of this group." });
+        return;
+      }
       const fakeParams = { get: (key) => body[key] != null ? String(body[key]) : null };
       const durations = parseInitialDurations(fakeParams);
-      createRoom(roomId, durations);
+      createRoom(roomId, durations, groupId);
       sendJson(response, 201, { room: roomId });
       return;
     }
@@ -1122,6 +1249,15 @@ function handleUpgrade(request, socket) {
     socket.write("HTTP/1.1 404 Not Found\r\n\r\n");
     socket.destroy();
     return;
+  }
+
+  if (room.groupId) {
+    const group = groups.get(room.groupId);
+    if (!group || !group.members.includes(user.username)) {
+      socket.write("HTTP/1.1 403 Forbidden\r\n\r\n");
+      socket.destroy();
+      return;
+    }
   }
 
   const accept = crypto

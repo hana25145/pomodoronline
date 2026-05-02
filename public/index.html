@@ -35,17 +35,69 @@
 
         <section class="mode-panel" id="modePanel" aria-label="Enter room" hidden>
           <p class="mode-label" id="accountBadge">Ready</p>
-          <button id="createRoomButton" class="create-room-button" type="button">Create Room</button>
-          <div class="multi-divider">or join</div>
-          <form class="join-room-form" id="joinRoomForm">
-            <input id="joinRoomInput" aria-label="Room code" placeholder="Room code" autocomplete="off" />
-            <button class="entry-button" type="submit">Join</button>
-          </form>
-          <p class="dialog-message" id="joinRoomMessage"></p>
+          <div class="groups-section">
+            <div class="groups-header">
+              <span class="groups-label">Groups</span>
+              <button id="newGroupButton" class="groups-new-btn" type="button">+ New</button>
+            </div>
+            <ul class="groups-list" id="groupsList"></ul>
+            <form class="new-group-form" id="newGroupForm" hidden>
+              <input id="newGroupInput" placeholder="Group name" maxlength="40" autocomplete="off" />
+              <button class="entry-button" type="submit">Create</button>
+            </form>
+            <p class="dialog-message" id="newGroupMessage"></p>
+          </div>
           <button id="entryLogoutButton" class="entry-ghost-button" type="button">Logout</button>
         </section>
       </section>
     </main>
+
+    <main class="group-shell" id="groupApp" hidden>
+      <header class="group-topbar">
+        <button id="groupBackButton" class="home-button" type="button" aria-label="Back">←</button>
+        <div class="group-topbar-center">
+          <p class="section-kicker">Group</p>
+          <h1 class="group-title" id="groupTitle"></h1>
+        </div>
+        <button id="groupInviteButton" class="settings-button" type="button">Copy invite</button>
+      </header>
+      <div class="group-body">
+        <section class="group-section">
+          <div class="group-section-head">
+            <h2>Active rooms</h2>
+            <button id="groupCreateRoomButton" class="create-room-button group-create-room-btn" type="button">+ Create room</button>
+          </div>
+          <ul class="group-rooms-list" id="groupRoomsList"></ul>
+        </section>
+        <section class="group-section">
+          <h2>Members</h2>
+          <ul class="group-members-list" id="groupMembersList"></ul>
+        </section>
+      </div>
+    </main>
+
+    <dialog class="goal-dialog" id="sessionGoalDialog" aria-labelledby="sessionGoalTitle">
+      <div class="goal-shell">
+        <p class="section-kicker">Focus session</p>
+        <h1 id="sessionGoalTitle">What's your goal?</h1>
+        <form id="sessionGoalForm">
+          <input id="sessionGoalInput" maxlength="60" autocomplete="off" placeholder="e.g. finish chapter 3 reading" />
+          <button class="create-room-submit" type="submit">Start session</button>
+        </form>
+      </div>
+    </dialog>
+
+    <dialog class="complete-dialog" id="sessionCompleteDialog">
+      <div class="complete-shell">
+        <p class="section-kicker">Session complete</p>
+        <h1>Did you finish your task?</h1>
+        <p class="complete-goal" id="sessionCompleteGoal"></p>
+        <div class="complete-actions">
+          <button id="sessionCompleteYes" class="complete-btn complete-yes" type="button">✓  Yes</button>
+          <button id="sessionCompleteNo" class="complete-btn complete-no" type="button">✗  No</button>
+        </div>
+      </div>
+    </dialog>
 
     <dialog class="create-dialog" id="createRoomDialog" aria-labelledby="createRoomTitle">
       <div class="settings-shell">
@@ -173,6 +225,7 @@
 
         <section class="timer-stage" aria-label="Pomodoro timer">
           <canvas id="focusCanvas" aria-hidden="true"></canvas>
+          <ul class="session-vote-list multi-only" id="sessionVoteList" hidden></ul>
           <div class="timeplate">
             <p class="mode-label" id="modeLabel">Focus</p>
             <div class="time-readout" id="timeReadout">25:00</div>

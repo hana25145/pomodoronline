@@ -1,0 +1,57 @@
+[
+  {
+    "id": "grp-f99b7ff0913a",
+    "name": "Study Gang",
+    "createdBy": "alice",
+    "createdAt": 1777677670558,
+    "members": [
+      "alice"
+    ]
+  },
+  {
+    "id": "grp-bea499b1ca47",
+    "name": "Study Gang",
+    "createdBy": "usr1",
+    "createdAt": 1777678164759,
+    "members": [
+      "usr1"
+    ]
+  },
+  {
+    "id": "grp-800b23e2656d",
+    "name": "Study Gang",
+    "createdBy": "tst1",
+    "createdAt": 1777682222656,
+    "members": [
+      "tst1"
+    ]
+  },
+  {
+    "id": "grp-e33818c60085",
+    "name": "Study Gang",
+    "createdBy": "qa1",
+    "createdAt": 1777682239681,
+    "members": [
+      "qa1",
+      "qa2"
+    ]
+  },
+  {
+    "id": "grp-fb17ca57c8bc",
+    "name": "OOMPA",
+    "createdBy": "sehyunjang09",
+    "createdAt": 1777682605384,
+    "members": [
+      "sehyunjang09"
+    ]
+  },
+  {
+    "id": "grp-5b828aa95ff8",
+    "name": "test group",
+    "createdBy": "sehyunjang09",
+    "createdAt": 1777682654064,
+    "members": [
+      "sehyunjang09"
+    ]
+  }
+]

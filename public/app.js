@@ -343,7 +343,6 @@ const state = {
   playerKey: "",
   audioUnlocked: sessionStorage.getItem("pmdr.audioUnlocked") === "1",
   focusTasks: [],
-  focusTaskPanelOpen: false,
   statusText: "",
   statusCooldownUntil: 0,
   todos: [],
@@ -466,10 +465,6 @@ const elements = {
   chatSubmitButton: document.querySelector("#chatForm button[type='submit']"),
   youtubePlayerHost: document.querySelector("#youtubePlayerHost"),
   canvas: document.querySelector("#focusCanvas"),
-  focusTaskPanel: document.querySelector("#focusTaskPanel"),
-  focusTaskPanelTab: document.querySelector("#focusTaskPanelTab"),
-  focusTaskList: document.querySelector("#focusTaskList"),
-  focusTaskPreview: document.querySelector("#focusTaskPreview"),
   sessionGoalDialog: document.querySelector("#sessionGoalDialog"),
   sessionGoalForm: document.querySelector("#sessionGoalForm"),
   sessionGoalInput: document.querySelector("#sessionGoalInput"),
@@ -549,9 +544,7 @@ function renderThemes() {
     const button = document.createElement("button");
     button.type = "button";
     button.className = `theme-swatch${id === state.theme ? " is-active" : ""}`;
-    button.style.setProperty("--swatch-bg", theme.swatchBg);
-    button.style.setProperty("--swatch-accent", theme.swatchAccent);
-    button.style.setProperty("--swatch-ink", theme.swatchInk);
+    button.textContent = theme.label;
     button.setAttribute("aria-label", `${theme.label} theme`);
     button.setAttribute("title", theme.label);
     button.addEventListener("click", () => applyTheme(id));
@@ -1862,7 +1855,6 @@ function applySnapshot(payload) {
   renderHistory();
   renderChat();
   renderMusic();
-  renderFocusTasks();
   renderSessionVotes();
   syncMusicPlayer();
 }
@@ -2063,7 +2055,6 @@ function startSolo() {
   renderHistory();
   renderChat();
   renderMusic();
-  renderFocusTasks();
 }
 
 async function joinRoom(room) {
@@ -2107,7 +2098,6 @@ function startMulti(room, setup = null) {
   renderHistory();
   renderChat();
   renderMusic();
-  renderFocusTasks();
   connect();
 }
 
@@ -2272,95 +2262,6 @@ function setPanelOpen(panel, open) {
   }
 }
 
-function setFocusTaskPanelOpen(open) {
-  state.focusTaskPanelOpen = open;
-  elements.focusTaskPanel.classList.toggle("is-open", open);
-  elements.focusTaskPanelTab.setAttribute("aria-expanded", String(open));
-}
-
-function renderFocusTasks() {
-  const myUsername = state.user?.username;
-
-  // Preserve the focused input value across re-renders
-  const activeEl = document.activeElement;
-  const inputFocused = activeEl?.classList.contains("focus-task-input") && elements.focusTaskList.contains(activeEl);
-  const savedValue = inputFocused ? activeEl.value : null;
-
-  const myEntry = state.focusTasks.find((e) => e.username === myUsername);
-  elements.focusTaskPreview.textContent = myEntry?.task || "";
-
-  const allEntries = [...state.focusTasks].sort((a, b) => {
-    if (a.username === myUsername) return -1;
-    if (b.username === myUsername) return 1;
-    return 0;
-  });
-
-  // In multi, if user has no server entry yet, prepend a local placeholder
-  if (!myEntry && myUsername && state.session === "multi") {
-    allEntries.unshift({ username: myUsername, name: state.name, color: state.color, task: "" });
-  }
-
-  elements.focusTaskList.innerHTML = "";
-
-  for (const entry of allEntries) {
-    const isMe = entry.username === myUsername;
-    const row = document.createElement("div");
-    row.className = "focus-task-row";
-    row.dataset.username = entry.username;
-
-    const dot = document.createElement("span");
-    dot.className = "focus-task-dot";
-    dot.style.setProperty("--dot-color", LEGACY_COLORS[entry.color] || entry.color || DEFAULT_COLOR);
-
-    const nameEl = document.createElement("span");
-    nameEl.className = "focus-task-name";
-    nameEl.textContent = isMe ? `${entry.name} (you)` : entry.name;
-
-    if (isMe) {
-      const input = document.createElement("input");
-      input.className = "focus-task-input";
-      input.value = inputFocused ? savedValue : (entry.task || "");
-      input.placeholder = "What are you working on?";
-      input.maxLength = 120;
-      input.autocomplete = "off";
-
-      let lastSent = entry.task || "";
-
-      const save = () => {
-        const text = input.value.trim();
-        if (text === lastSent) return;
-        lastSent = text;
-        if (state.session === "multi") {
-          send({ type: "focusTask", text });
-        } else {
-          if (state.focusTasks[0]) state.focusTasks[0].task = text;
-          localStorage.setItem(STORAGE_KEYS.focusTask, text);
-          elements.focusTaskPreview.textContent = text;
-        }
-      };
-
-      input.addEventListener("blur", save);
-      input.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") { e.preventDefault(); input.blur(); }
-        if (e.key === "Escape") { input.value = lastSent; input.blur(); }
-      });
-
-      row.append(dot, nameEl, input);
-
-      if (inputFocused) {
-        requestAnimationFrame(() => { input.focus(); input.setSelectionRange(input.value.length, input.value.length); });
-      }
-    } else {
-      const taskEl = document.createElement("span");
-      taskEl.className = "focus-task-text";
-      taskEl.textContent = entry.task || "";
-      row.append(dot, nameEl, taskEl);
-    }
-
-    elements.focusTaskList.append(row);
-  }
-}
-
 function renderSessionVotes() {
   if (!elements.sessionVoteList) return;
   const isBreak = state.session === "multi" && state.timer.mode !== "focus";
@@ -2515,7 +2416,6 @@ function bindEvents() {
   elements.closeChatButton.addEventListener("click", () => setPanelOpen("chat", false));
   elements.openMusicButton.addEventListener("click", () => setPanelOpen("music", true));
   elements.openChatButton.addEventListener("click", () => setPanelOpen("chat", true));
-  elements.focusTaskPanelTab.addEventListener("click", () => setFocusTaskPanelOpen(!state.focusTaskPanelOpen));
   elements.musicMuteButton.addEventListener("click", () => setMusicMuted(!state.musicMuted));
 
   elements.startPauseButton.addEventListener("click", () => {

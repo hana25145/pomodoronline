@@ -1182,7 +1182,7 @@ function postMusicCommand(func, args = []) {
 }
 
 function scheduleMusicKeepAlive({ unmute = false, attempts = 4, initialDelay = 160 } = {}) {
-  if (state.session !== "multi" || !state.music.current) {
+  if (state.session !== "multi" || !state.music.current || !state.musicPanelOpen) {
     return;
   }
   lastMusicKeepAliveAt = performance.now();
@@ -1192,7 +1192,7 @@ function scheduleMusicKeepAlive({ unmute = false, attempts = 4, initialDelay = 1
       if (keepAliveStamp !== musicKeepAliveScheduledAt) {
         return;
       }
-      if (state.session !== "multi" || !state.music.current) {
+      if (state.session !== "multi" || !state.music.current || !state.musicPanelOpen) {
         return;
       }
       postMusicCommand("playVideo");
@@ -1228,7 +1228,7 @@ function unlockAudioPlayback() {
     state.audioUnlocked = true;
     sessionStorage.setItem("pmdr.audioUnlocked", "1");
   }
-  if (state.session !== "multi" || !state.music.current) {
+  if (state.session !== "multi" || !state.music.current || !state.musicPanelOpen) {
     return;
   }
   if (!getMusicIframe()) {
@@ -1257,6 +1257,10 @@ function syncMusicPlayer(force = false) {
     clearMusicPlayer();
     return;
   }
+  if (!state.musicPanelOpen) {
+    clearMusicPlayer();
+    return;
+  }
 
   const current = state.music.current;
   const key = `${current.id}:${current.startedAt}`;
@@ -1267,10 +1271,10 @@ function syncMusicPlayer(force = false) {
   youtubePlayerPlaying = false;
   const resumeAtSeconds = Math.max(0, Math.floor((Date.now() + state.serverOffset - current.startedAt) / 1000));
   const iframe = document.createElement("iframe");
-  iframe.width = "200";
-  iframe.height = "113";
-  iframe.src = `https://www.youtube.com/embed/${encodeURIComponent(current.videoId)}?autoplay=1&controls=0&start=${resumeAtSeconds}&playsinline=1&modestbranding=1&rel=0&enablejsapi=1&origin=${encodeURIComponent(window.location.origin)}&mute=1`;
-  iframe.title = "Background music";
+  iframe.width = "320";
+  iframe.height = "320";
+  iframe.src = `https://www.youtube.com/embed/${encodeURIComponent(current.videoId)}?autoplay=1&controls=1&start=${resumeAtSeconds}&playsinline=1&modestbranding=1&rel=0&enablejsapi=1&origin=${encodeURIComponent(window.location.origin)}&mute=1`;
+  iframe.title = "YouTube music player";
   iframe.frameBorder = "0";
   iframe.allow = "autoplay; encrypted-media; picture-in-picture";
   iframe.referrerPolicy = "strict-origin-when-cross-origin";
@@ -1826,6 +1830,14 @@ function connect() {
     } else if (payload.type === "notice") {
       setNotice(payload.text);
       setMusicMessage(payload.text);
+    } else if (payload.type === "session-replaced") {
+      const message = payload.text || "This room session continued in another tab.";
+      if (state.socket === socket) {
+        state.socket = null;
+      }
+      clearMusicPlayer();
+      goHome();
+      elements.newGroupMessage.textContent = message;
     }
   });
 
@@ -2071,6 +2083,12 @@ function setPanelOpen(panel, open) {
   if (panel === "music") {
     state.musicPanelOpen = open;
     elements.musicPanel.classList.toggle("panel-closed", !open);
+    if (open) {
+      syncMusicPlayer(true);
+      tickMusicProgress();
+    } else {
+      clearMusicPlayer();
+    }
   } else {
     state.chatPanelOpen = open;
     elements.chatPanel.classList.toggle("panel-closed", !open);
@@ -2474,7 +2492,7 @@ function bindEvents() {
   });
 
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible" && state.music.current) {
+    if (document.visibilityState === "visible" && state.music.current && state.musicPanelOpen) {
       if (!getMusicIframe()) {
         syncMusicPlayer(true);
       } else if (youtubePlayerPlaying && audioInitializedInTab && !state.musicMuted) {
@@ -2489,7 +2507,7 @@ function bindEvents() {
     }
   });
   window.addEventListener("pageshow", () => {
-    if (state.music.current) {
+    if (state.music.current && state.musicPanelOpen) {
       if (!getMusicIframe()) {
         syncMusicPlayer(true);
       } else {
@@ -2529,7 +2547,7 @@ function tick() {
     }
 
     const progress = getProgress();
-    const waveActive = Boolean(state.music.current);
+    const waveActive = Boolean(state.music.current && state.musicPanelOpen);
     if (waveActive && !getMusicIframe()) {
       syncMusicPlayer(true);
     }

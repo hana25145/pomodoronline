@@ -41,6 +41,7 @@ const groups = loadGroups();
 const authTokens = new Map();
 const rooms = new Map();
 const sockets = new Map();
+const activeClientsByUsername = new Map();
 
 function ensureDataDir() {
   fs.mkdirSync(dataDir, { recursive: true });
@@ -490,6 +491,21 @@ function broadcast(room) {
   }
 }
 
+function replaceActiveClientForUser(nextClient) {
+  const username = nextClient.user.username;
+  const previousClient = activeClientsByUsername.get(username);
+  if (previousClient && previousClient !== nextClient) {
+    previousClient.disconnectReason = "continued in another tab";
+    sendToClient(previousClient, {
+      type: "session-replaced",
+      text: "This room session continued in another tab."
+    });
+    removeClient(previousClient.socket);
+    previousClient.socket.end();
+  }
+  activeClientsByUsername.set(username, nextClient);
+}
+
 function readFrames(buffer) {
   const messages = [];
   let offset = 0;
@@ -765,9 +781,12 @@ function removeClient(socket) {
 
   const room = client.room;
   sockets.delete(socket);
+  if (activeClientsByUsername.get(client.user.username) === client) {
+    activeClientsByUsername.delete(client.user.username);
+  }
   room.clients.delete(client);
   room.participants.delete(client.id);
-  addHistory(room, client.participant.name, "left quietly");
+  addHistory(room, client.participant.name, client.disconnectReason || "left quietly");
   assignHostIfNeeded(room);
   broadcast(room);
 
@@ -1300,6 +1319,7 @@ function handleUpgrade(request, socket) {
   };
 
   sockets.set(socket, client);
+  replaceActiveClientForUser(client);
   room.clients.add(client);
   room.participants.set(id, participant);
   if (!room.focusTasks.has(user.username)) {

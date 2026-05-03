@@ -108,6 +108,7 @@
             <div class="material-subjects-head">
               <h2>Files</h2>
               <div class="subject-detail-actions">
+                <input id="subjectFileSearchInput" class="subject-file-search" type="search" placeholder="Search files" autocomplete="off" />
                 <button id="subjectRenameButton" class="groups-new-btn" type="button">Rename</button>
                 <button id="subjectFolderButton" class="groups-new-btn" type="button">+ Folder</button>
                 <button id="subjectUploadButton" class="groups-new-btn" type="button">Upload</button>
@@ -115,20 +116,6 @@
             </div>
             <ul class="subjects-list" id="subjectsList"></ul>
             <input id="fileUploadInput" type="file" hidden />
-          </div>
-
-          <div class="material-threads-pane">
-            <div class="material-threads-head">
-              <h2>Discussion</h2>
-            </div>
-            <ul class="threads-list" id="threadsList"></ul>
-            <div class="new-thread-form-wrapper">
-              <div id="mentionDropdown" class="mention-dropdown" hidden></div>
-              <form id="newThreadForm" class="new-thread-form">
-                <input id="threadInput" class="new-thread-input" placeholder="Ask a question… type @ to mention a file" maxlength="1000" autocomplete="off" />
-                <button class="icon-button" type="submit">Post</button>
-              </form>
-            </div>
           </div>
         </div>
       </div>
@@ -304,7 +291,9 @@
             <button id="closeChatButton" class="icon-button" type="button" aria-label="Close chat panel">×</button>
           </div>
           <ul class="chat-list" id="chatList" role="list"></ul>
+          <div class="chat-file-picker" id="chatFilePicker" hidden></div>
           <form class="chat-form" id="chatForm">
+            <button id="chatAttachButton" class="icon-button chat-attach-button" type="button" aria-label="Share group file">File</button>
             <input id="chatInput" aria-label="Chat message" maxlength="300" autocomplete="off" placeholder="Type a message" />
             <button class="icon-button" type="submit">Send</button>
           </form>

@@ -24,14 +24,22 @@ Recommended platforms:
 
 - `PORT`: server port. Default: `5173`
 - `DATA_DIR`: directory for persisted user data such as `users.json`
+- `PUBLIC_BASE_URL`: public app URL, used for Google OAuth callbacks
+- `GOOGLE_CLIENT_ID`: Google OAuth client ID
+- `GOOGLE_CLIENT_SECRET`: Google OAuth client secret
+- `GOOGLE_REDIRECT_URI`: Google OAuth redirect URI. Defaults to `${PUBLIC_BASE_URL}/api/google/callback`
+- `GOOGLE_DRIVE_FOLDER_ID`: optional Drive folder ID for uploaded files
 
 Example:
 
 ```bash
 DATA_DIR=/data
+PUBLIC_BASE_URL=https://your-app.up.railway.app
+GOOGLE_REDIRECT_URI=https://your-app.up.railway.app/api/google/callback
 ```
 
 If you want signups to survive restarts and redeploys, mount a persistent disk and point `DATA_DIR` to it.
+Shared Material uploads use the uploader's connected Google Drive account when Google OAuth is configured.
 
 ## Health Check
 

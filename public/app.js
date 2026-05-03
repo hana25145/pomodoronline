@@ -334,6 +334,10 @@ const state = {
   musicSearchMode: "search",
   musicPanelOpen: true,
   chatPanelOpen: true,
+  roomGroupId: "",
+  roomMaterials: [],
+  chatFilePickerOpen: false,
+  chatFileQuery: "",
   musicMuted: localStorage.getItem(STORAGE_KEYS.muted) === "1",
   musicMuteTime: 0,
   reconnectTimer: null,
@@ -356,15 +360,12 @@ const state = {
   activeTask: null,
   groupTab: "rooms",
   groupMaterials: [],
-  groupThreads: [],
   currentSubjectId: null,
   pendingUploadSubjectId: null,
   pendingUploadFolderId: null,
+  materialFileQuery: "",
   pdfPreviewObjectUrl: "",
-  pdfPreviewDownload: null,
-  mentionQuery: "",
-  mentionHighlight: 0,
-  openReplyThreadId: null
+  pdfPreviewDownload: null
 };
 
 const elements = {
@@ -443,6 +444,8 @@ const elements = {
   chatList: document.querySelector("#chatList"),
   chatForm: document.querySelector("#chatForm"),
   chatInput: document.querySelector("#chatInput"),
+  chatAttachButton: document.querySelector("#chatAttachButton"),
+  chatFilePicker: document.querySelector("#chatFilePicker"),
   musicCurrentTitle: document.querySelector("#musicCurrentTitle"),
   musicCurrentMeta: document.querySelector("#musicCurrentMeta"),
   musicSkipButton: document.querySelector("#musicSkipButton"),
@@ -500,6 +503,7 @@ const elements = {
   subjectRenameButton: document.querySelector("#subjectRenameButton"),
   subjectFolderButton: document.querySelector("#subjectFolderButton"),
   subjectUploadButton: document.querySelector("#subjectUploadButton"),
+  subjectFileSearchInput: document.querySelector("#subjectFileSearchInput"),
   addSubjectButton: document.querySelector("#addSubjectButton"),
   newSubjectForm: document.querySelector("#newSubjectForm"),
   newSubjectInput: document.querySelector("#newSubjectInput"),
@@ -507,11 +511,7 @@ const elements = {
   subjectTilesList: document.querySelector("#subjectTilesList"),
   subjectCategoryButtons: document.querySelector("#subjectCategoryButtons"),
   subjectsList: document.querySelector("#subjectsList"),
-  fileUploadInput: document.querySelector("#fileUploadInput"),
-  threadsList: document.querySelector("#threadsList"),
-  newThreadForm: document.querySelector("#newThreadForm"),
-  threadInput: document.querySelector("#threadInput"),
-  mentionDropdown: document.querySelector("#mentionDropdown")
+  fileUploadInput: document.querySelector("#fileUploadInput")
 };
 
 const context = elements.canvas.getContext("2d");
@@ -631,10 +631,20 @@ async function apiRequest(path, options = {}) {
 
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(data.error || "Request failed.");
+    const error = new Error(data.error || "Request failed.");
+    error.code = data.code || "";
+    throw error;
   }
 
   return data;
+}
+
+async function connectGoogleDrive() {
+  const data = await apiRequest("/api/google/connect", { method: "GET" });
+  const popup = window.open(data.url, "google-drive-connect", "width=520,height=720");
+  if (!popup) {
+    window.location.href = data.url;
+  }
 }
 
 function setAuthMode(mode) {
@@ -790,7 +800,6 @@ function renderGroupPage(data) {
   const { group, activeRooms } = data;
   elements.groupTitle.textContent = group.name;
   fetchGroupMaterials();
-  fetchGroupThreads();
 
   elements.groupMembersList.innerHTML = "";
   for (const username of group.members) {
@@ -1516,6 +1525,7 @@ function updateControls() {
   elements.longMinutes.disabled = !canControl;
   elements.chatInput.disabled = !canUseRoomPanels;
   elements.chatSubmitButton.disabled = !canUseRoomPanels;
+  if (elements.chatAttachButton) elements.chatAttachButton.disabled = !canUseRoomPanels || !state.roomGroupId;
   elements.musicSearchInput.disabled = !canUseRoomPanels;
   elements.musicSearchSubmitButton.disabled = !canUseRoomPanels;
   elements.chatInput.placeholder = isMulti ? "Type a message" : "Join a room to chat";
@@ -1626,6 +1636,99 @@ function scrollChatToBottom() {
   elements.chatList.scrollTop = elements.chatList.scrollHeight;
 }
 
+async function fetchRoomMaterials() {
+  if (!state.roomGroupId) {
+    state.roomMaterials = [];
+    renderChatFilePicker();
+    return;
+  }
+  try {
+    const data = await apiRequest(`/api/groups/${encodeURIComponent(state.roomGroupId)}/materials`);
+    state.roomMaterials = data.materials || [];
+  } catch {
+    state.roomMaterials = [];
+  }
+  renderChatFilePicker();
+}
+
+function setChatFilePickerOpen(open) {
+  state.chatFilePickerOpen = Boolean(open);
+  renderChatFilePicker();
+  if (open && state.roomGroupId) {
+    fetchRoomMaterials();
+  }
+}
+
+function sendChatFile(file) {
+  if (state.session !== "multi") return;
+  send({
+    type: "chat",
+    text: elements.chatInput.value.trim(),
+    file: { id: file.id, subjectId: file.subjectId }
+  });
+  elements.chatInput.value = "";
+  state.chatFileQuery = "";
+  setChatFilePickerOpen(false);
+}
+
+function renderChatFilePicker() {
+  if (!elements.chatFilePicker) return;
+  elements.chatFilePicker.hidden = !state.chatFilePickerOpen;
+  elements.chatAttachButton?.classList.toggle("is-active", state.chatFilePickerOpen);
+  if (!state.chatFilePickerOpen) return;
+  elements.chatFilePicker.innerHTML = "";
+  const allFiles = getRoomFiles();
+  const files = allFiles.filter((file) => fileMatchesQuery(file, state.chatFileQuery));
+  if (!state.roomGroupId) {
+    elements.chatFilePicker.textContent = "This room is not connected to a group.";
+    return;
+  }
+  const search = document.createElement("input");
+  search.className = "chat-file-search";
+  search.type = "search";
+  search.placeholder = "Search files";
+  search.autocomplete = "off";
+  search.value = state.chatFileQuery;
+  search.addEventListener("input", () => {
+    state.chatFileQuery = search.value.trim();
+    renderChatFilePicker();
+    requestAnimationFrame(() => {
+      const nextSearch = elements.chatFilePicker.querySelector(".chat-file-search");
+      nextSearch?.focus();
+      nextSearch?.setSelectionRange(nextSearch.value.length, nextSearch.value.length);
+    });
+  });
+  elements.chatFilePicker.append(search);
+  if (allFiles.length === 0) {
+    elements.chatFilePicker.textContent = "No group files to share yet.";
+    return;
+  }
+  if (files.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "chat-file-empty";
+    empty.textContent = "No files match that search.";
+    elements.chatFilePicker.append(empty);
+    return;
+  }
+  for (const file of files) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "chat-file-option";
+    button.innerHTML = `
+      <span class="chat-file-option-icon"></span>
+      <span class="chat-file-option-main">
+        <span class="chat-file-option-name"></span>
+        <span class="chat-file-option-meta"></span>
+      </span>
+    `;
+    button.querySelector(".chat-file-option-icon").textContent = fileIcon(file.mimeType);
+    button.querySelector(".chat-file-option-name").textContent = file.name;
+    button.querySelector(".chat-file-option-meta").textContent = `${file.subjectName}${file.folderName ? ` / ${file.folderName}` : ""} · ${formatFileSize(file.size)}`;
+    button.addEventListener("click", () => sendChatFile(file));
+    elements.chatFilePicker.append(button);
+  }
+}
+
 function renderChat() {
   elements.chatList.innerHTML = "";
   if (state.session !== "multi" && !state.chat.length) {
@@ -1641,11 +1744,32 @@ function renderChat() {
       <div class="chat-main">
         <span class="chat-author"></span>
         <span class="chat-text"></span>
+        <button class="chat-file-card" type="button" hidden>
+          <span class="chat-file-card-icon"></span>
+          <span class="chat-file-card-main">
+            <span class="chat-file-card-name"></span>
+            <span class="chat-file-card-meta"></span>
+          </span>
+        </button>
       </div>
       <time class="chat-meta"></time>
     `;
     item.querySelector(".chat-author").textContent = message.author.name;
     item.querySelector(".chat-text").textContent = message.text;
+    if (message.file) {
+      const fileCard = item.querySelector(".chat-file-card");
+      fileCard.hidden = false;
+      fileCard.querySelector(".chat-file-card-icon").textContent = fileIcon(message.file.mimeType);
+      fileCard.querySelector(".chat-file-card-name").textContent = message.file.name;
+      fileCard.querySelector(".chat-file-card-meta").textContent = `${message.file.subjectName}${message.file.folderName ? ` / ${message.file.folderName}` : ""} · ${formatFileSize(message.file.size)}`;
+      fileCard.addEventListener("click", () => {
+        if (message.file.webViewLink || message.file.webContentLink) {
+          window.open(message.file.webViewLink || message.file.webContentLink, "_blank", "noopener");
+          return;
+        }
+        downloadMaterialFile(state.roomGroupId, message.file.subjectId, message.file.id);
+      });
+    }
     const timeEl = item.querySelector(".chat-meta");
     timeEl.textContent = time;
     timeEl.dateTime = new Date(message.at).toISOString();
@@ -1819,6 +1943,12 @@ function applySnapshot(payload) {
   state.chat = payload.chat || [];
   state.music = payload.music || { current: null, queue: [], maxPerUser: 5 };
   state.room = payload.room;
+  const nextRoomGroupId = payload.groupId || "";
+  if (nextRoomGroupId !== state.roomGroupId) {
+    state.roomGroupId = nextRoomGroupId;
+    state.roomMaterials = [];
+    if (state.roomGroupId) fetchRoomMaterials();
+  }
   state.isHost = Boolean(payload.isHost);
   state.statusText = normalizeStatusText(payload.viewer?.statusText || "");
   state.statusCooldownUntil = Number(payload.viewer?.statusCooldownUntil || 0);
@@ -2037,6 +2167,9 @@ function startSolo() {
   state.chat = [];
   state.music = { current: null, queue: [], maxPerUser: 5 };
   state.musicResults = [];
+  state.roomGroupId = "";
+  state.roomMaterials = [];
+  state.chatFilePickerOpen = false;
   state.focusTasks = [{
     username: state.user?.username || "me",
     name: state.name,
@@ -2083,6 +2216,9 @@ function startMulti(room, setup = null) {
   state.chat = [];
   state.music = { current: null, queue: [], maxPerUser: 5 };
   state.musicResults = [];
+  state.roomGroupId = "";
+  state.roomMaterials = [];
+  state.chatFilePickerOpen = false;
   state.focusTasks = [];
   state.statusText = "";
   state.statusCooldownUntil = 0;
@@ -2117,6 +2253,9 @@ function goHome() {
   state.chat = [];
   state.music = { current: null, queue: [], maxPerUser: 5 };
   state.musicResults = [];
+  state.roomGroupId = "";
+  state.roomMaterials = [];
+  state.chatFilePickerOpen = false;
   state.focusTasks = [];
   state.statusText = "";
   state.statusCooldownUntil = 0;
@@ -2576,6 +2715,10 @@ function bindEvents() {
     send({ type: "chat", text });
     elements.chatInput.value = "";
   });
+  elements.chatAttachButton?.addEventListener("click", () => {
+    if (state.session !== "multi") return;
+    setChatFilePickerOpen(!state.chatFilePickerOpen);
+  });
 
   elements.musicHeartButton.addEventListener("click", () => {
     if (state.music.current) toggleSavedTrack(state.music.current);
@@ -2602,6 +2745,16 @@ function bindEvents() {
 
   window.addEventListener("pointerdown", unlockAudioPlayback, { passive: true });
   window.addEventListener("touchstart", unlockAudioPlayback, { passive: true });
+  window.addEventListener("message", async (event) => {
+    if (event.data?.type !== "google-drive-connected") return;
+    try {
+      const data = await apiRequest("/api/auth/me", { method: "GET", headers: {} });
+      state.user = data.user;
+      alert("Google Drive connected. Uploads will now be saved to your Drive.");
+    } catch {
+      alert("Google Drive connected, but the session could not be refreshed.");
+    }
+  });
   window.addEventListener("touchend", unlockAudioPlayback, { passive: true });
   window.addEventListener("click", unlockAudioPlayback, { passive: true });
   window.addEventListener("keydown", unlockAudioPlayback);
@@ -2702,23 +2855,48 @@ function subjectIconMarkup(name) {
 function getAllFiles() {
   const files = [];
   for (const subject of state.groupMaterials) {
-    const folders = subject.folders || [];
-    for (const file of subject.files || []) {
-      const folder = file.folderId ? folders.find((f) => f.id === file.folderId) : null;
-      files.push({ ...file, subjectId: subject.id, subjectName: subject.name, folderName: folder?.name || "" });
-    }
+    files.push(...filesFromSubject(subject));
   }
   return files;
 }
 
-function materialFileUrl(subjectId, fileId, action = "download") {
-  if (!state.currentGroup) return "";
-  return `/api/groups/${encodeURIComponent(state.currentGroup.id)}/materials/${encodeURIComponent(subjectId)}/files/${encodeURIComponent(fileId)}/${action}`;
+function filesFromSubject(subject) {
+  const files = [];
+  const folders = subject.folders || [];
+  for (const file of subject.files || []) {
+    const folder = file.folderId ? folders.find((f) => f.id === file.folderId) : null;
+    files.push({ ...file, subjectId: subject.id, subjectName: subject.name, folderName: folder?.name || "" });
+  }
+  return files;
 }
 
-function downloadFile(subjectId, fileId) {
-  if (!state.currentGroup) return;
-  const url = materialFileUrl(subjectId, fileId, "download");
+function getRoomFiles() {
+  const files = [];
+  for (const subject of state.roomMaterials) {
+    files.push(...filesFromSubject(subject));
+  }
+  return files;
+}
+
+function fileMatchesQuery(file, query) {
+  const q = String(query || "").trim().toLowerCase();
+  if (!q) return true;
+  return [
+    file.name,
+    file.subjectName,
+    file.folderName,
+    file.mimeType
+  ].some((value) => String(value || "").toLowerCase().includes(q));
+}
+
+function materialFileUrl(subjectId, fileId, action = "download", groupId = state.currentGroup?.id) {
+  if (!groupId) return "";
+  return `/api/groups/${encodeURIComponent(groupId)}/materials/${encodeURIComponent(subjectId)}/files/${encodeURIComponent(fileId)}/${action}`;
+}
+
+function downloadMaterialFile(groupId, subjectId, fileId) {
+  const url = materialFileUrl(subjectId, fileId, "download", groupId);
+  if (!url) return;
   const a = document.createElement("a");
   a.href = url;
   a.setAttribute("download", "");
@@ -2734,6 +2912,11 @@ function downloadFile(subjectId, fileId) {
       setTimeout(() => { URL.revokeObjectURL(objUrl); a.remove(); }, 2000);
     });
   }).catch(() => a.remove());
+}
+
+function downloadFile(subjectId, fileId) {
+  if (!state.currentGroup) return;
+  downloadMaterialFile(state.currentGroup.id, subjectId, fileId);
 }
 
 function closePdfPreview() {
@@ -2764,6 +2947,10 @@ async function previewPdf(subjectId, file) {
 }
 
 function openFile(subjectId, file) {
+  if (file.webViewLink || file.webContentLink) {
+    window.open(file.webViewLink || file.webContentLink, "_blank", "noopener");
+    return;
+  }
   if (file.mimeType === "application/pdf") {
     previewPdf(subjectId, file).catch((err) => alert(err.message || "Could not open PDF."));
     return;
@@ -2773,17 +2960,19 @@ function openFile(subjectId, file) {
 
 function openSubjectDetail(subjectId) {
   state.currentSubjectId = subjectId;
+  state.materialFileQuery = "";
+  if (elements.subjectFileSearchInput) elements.subjectFileSearchInput.value = "";
   elements.groupBodyRooms.hidden = true;
   elements.subjectDetailView.hidden = false;
   renderMaterials();
-  renderThreads();
 }
 
 function closeSubjectDetail() {
   state.currentSubjectId = null;
+  state.materialFileQuery = "";
+  if (elements.subjectFileSearchInput) elements.subjectFileSearchInput.value = "";
   elements.subjectDetailView.hidden = true;
   elements.groupBodyRooms.hidden = false;
-  hideMentionDropdown();
   renderMaterials();
 }
 
@@ -2796,17 +2985,6 @@ async function fetchGroupMaterials() {
     state.groupMaterials = [];
   }
   renderMaterials();
-}
-
-async function fetchGroupThreads() {
-  if (!state.currentGroup) return;
-  try {
-    const data = await apiRequest(`/api/groups/${encodeURIComponent(state.currentGroup.id)}/threads`);
-    state.groupThreads = data.threads || [];
-  } catch {
-    state.groupThreads = [];
-  }
-  renderThreads();
 }
 
 async function addSubject(name) {
@@ -2835,7 +3013,6 @@ async function deleteSubject(subjectId) {
   await apiRequest(`/api/groups/${encodeURIComponent(state.currentGroup.id)}/materials/${encodeURIComponent(subjectId)}`, { method: "DELETE" });
   state.groupMaterials = state.groupMaterials.filter((s) => s.id !== subjectId);
   renderMaterials();
-  renderThreads();
 }
 
 async function addFolder(subjectId, name) {
@@ -2876,7 +3053,6 @@ async function deleteFolder(subjectId, folderId) {
     }
   }
   renderMaterials();
-  renderThreads();
 }
 
 async function uploadFileToSubject(subjectId, file, folderId = null) {
@@ -2894,6 +3070,12 @@ async function uploadFileToSubject(subjectId, file, folderId = null) {
       if (subject) { subject.files = subject.files || []; subject.files.push(data.file); }
       renderMaterials();
     } catch (err) {
+      if (err.code === "google_drive_required") {
+        if (confirm("Connect Google Drive before uploading files. Connect now?")) {
+          connectGoogleDrive().catch((error) => alert(error.message || "Could not start Google Drive connection."));
+        }
+        return;
+      }
       alert(err.message || "Upload failed.");
     }
   };
@@ -2909,7 +3091,6 @@ async function renameFile(subjectId, fileId, name) {
   const idx = subject?.files?.findIndex((f) => f.id === fileId) ?? -1;
   if (idx !== -1) subject.files[idx] = data.file;
   renderMaterials();
-  renderThreads();
 }
 
 async function moveFile(subjectId, fileId, folderId) {
@@ -2923,7 +3104,6 @@ async function moveFile(subjectId, fileId, folderId) {
   );
   Object.assign(file, data.file);
   renderMaterials();
-  renderThreads();
 }
 
 async function deleteFileFromSubject(subjectId, fileId) {
@@ -2935,77 +3115,6 @@ async function deleteFileFromSubject(subjectId, fileId) {
   const subject = state.groupMaterials.find((s) => s.id === subjectId);
   if (subject) subject.files = (subject.files || []).filter((f) => f.id !== fileId);
   renderMaterials();
-}
-
-async function postThread(text, mentionedFileIds) {
-  if (!state.currentGroup) return;
-  const data = await apiRequest(`/api/groups/${encodeURIComponent(state.currentGroup.id)}/threads`, {
-    method: "POST",
-    body: JSON.stringify({ text, mentionedFileIds })
-  });
-  state.groupThreads.unshift(data.thread);
-  renderThreads();
-}
-
-async function replyToThread(threadId, text) {
-  if (!state.currentGroup) return;
-  const data = await apiRequest(`/api/groups/${encodeURIComponent(state.currentGroup.id)}/threads/${encodeURIComponent(threadId)}/replies`, {
-    method: "POST",
-    body: JSON.stringify({ text })
-  });
-  const thread = state.groupThreads.find((t) => t.id === threadId);
-  if (thread) thread.replies.push(data.reply);
-  state.openReplyThreadId = null;
-  renderThreads();
-}
-
-async function toggleResolveThread(threadId) {
-  if (!state.currentGroup) return;
-  const data = await apiRequest(`/api/groups/${encodeURIComponent(state.currentGroup.id)}/threads/${encodeURIComponent(threadId)}`, { method: "PATCH" });
-  const idx = state.groupThreads.findIndex((t) => t.id === threadId);
-  if (idx !== -1) state.groupThreads[idx] = data.thread;
-  renderThreads();
-}
-
-async function deleteThread(threadId) {
-  if (!state.currentGroup) return;
-  await apiRequest(`/api/groups/${encodeURIComponent(state.currentGroup.id)}/threads/${encodeURIComponent(threadId)}`, { method: "DELETE" });
-  state.groupThreads = state.groupThreads.filter((t) => t.id !== threadId);
-  renderThreads();
-}
-
-// Render @mention syntax: @[name](fileId) → clickable button
-function renderTextWithMentions(text) {
-  const fragment = document.createDocumentFragment();
-  const regex = /@\[([^\]]+)\]\(([^)]+)\)/g;
-  let lastIndex = 0;
-  let match;
-  while ((match = regex.exec(text)) !== null) {
-    if (match.index > lastIndex) {
-      fragment.appendChild(document.createTextNode(text.slice(lastIndex, match.index)));
-    }
-    const [, name, fileId] = match;
-    const allFiles = getAllFiles();
-    const fileInfo = allFiles.find((f) => f.id === fileId);
-    const btn = document.createElement("button");
-    btn.className = "thread-mention";
-    btn.type = "button";
-    btn.textContent = `@${name}`;
-    if (fileInfo) {
-      btn.title = `Download ${name}`;
-      btn.addEventListener("click", () => downloadFile(fileInfo.subjectId, fileId));
-    } else {
-      btn.disabled = true;
-      btn.style.opacity = "0.5";
-      btn.title = "File no longer available";
-    }
-    fragment.appendChild(btn);
-    lastIndex = regex.lastIndex;
-  }
-  if (lastIndex < text.length) {
-    fragment.appendChild(document.createTextNode(text.slice(lastIndex)));
-  }
-  return fragment;
 }
 
 function formatRelativeTime(ts) {
@@ -3083,8 +3192,8 @@ function createFileRow(subject, file) {
   const downloadBtn = document.createElement("button");
   downloadBtn.type = "button";
   downloadBtn.className = "icon-button subject-file-action";
-  downloadBtn.textContent = file.mimeType === "application/pdf" ? "Download" : "Open";
-  downloadBtn.addEventListener("click", () => downloadFile(subject.id, file.id));
+  downloadBtn.textContent = file.webViewLink ? "Open" : file.mimeType === "application/pdf" ? "Download" : "Open";
+  downloadBtn.addEventListener("click", () => openFile(subject.id, file));
 
   const delBtn = document.createElement("button");
   delBtn.type = "button";
@@ -3127,18 +3236,47 @@ function renderSubjectDetail() {
   elements.subjectDetailTitle.textContent = subject.name;
   elements.subjectDetailMeta.textContent = `${subject.files.length} file${subject.files.length !== 1 ? "s" : ""} · ${subject.folders.length} folder${subject.folders.length !== 1 ? "s" : ""} · created by ${subject.createdBy || "unknown"}`;
 
-  if (subject.folders.length === 0 && subject.files.length === 0) {
+  if (elements.subjectFileSearchInput) {
+    elements.subjectFileSearchInput.value = state.materialFileQuery;
+  }
+
+  const visibleFolders = subject.folders.filter((folder) => (
+    folder.id !== DEFAULT_FILES_FOLDER_ID ||
+    subject.files.some((file) => file.folderId === DEFAULT_FILES_FOLDER_ID)
+  ));
+  const realFolders = subject.folders.filter((folder) => folder.id !== DEFAULT_FILES_FOLDER_ID);
+  const query = state.materialFileQuery;
+  const folderEntries = visibleFolders.map((folder) => {
+    const folderFiles = subject.files
+      .filter((file) => file.folderId === folder.id)
+      .filter((file) => fileMatchesQuery({ ...file, subjectName: subject.name, folderName: folder.name }, query));
+    return { folder, files: folderFiles };
+  }).filter((entry) => !query || entry.files.length > 0);
+
+  if (subject.files.length === 0 && realFolders.length === 0) {
     const empty = document.createElement("li");
     empty.className = "subject-files-empty";
-    empty.textContent = "No files uploaded yet.";
+    empty.textContent = "No files yet. Use Upload to add study material.";
     elements.subjectsList.append(empty);
     return;
   }
 
-  for (const folder of subject.folders) {
+  if (query && folderEntries.length === 0) {
+    const empty = document.createElement("li");
+    empty.className = "subject-files-empty";
+    empty.textContent = "No files match that search.";
+    elements.subjectsList.append(empty);
+    return;
+  }
+
+  const header = document.createElement("li");
+  header.className = "subject-list-header";
+  header.innerHTML = "<span>Name</span><span>Details</span><span>Actions</span>";
+  elements.subjectsList.append(header);
+
+  for (const { folder, files: folderFiles } of folderEntries) {
     const folderItem = document.createElement("li");
     folderItem.className = "subject-folder-item";
-    const folderFiles = subject.files.filter((file) => file.folderId === folder.id);
     const folderHead = document.createElement("div");
     folderHead.className = "subject-folder-head";
     const folderName = document.createElement("span");
@@ -3430,192 +3568,6 @@ function renderMaterials() {
   }
 }
 
-function renderThreads() {
-  if (!elements.threadsList) return;
-  elements.threadsList.innerHTML = "";
-  if (state.groupThreads.length === 0) {
-    const empty = document.createElement("li");
-    empty.className = "threads-empty";
-    empty.textContent = "No discussion yet. Post a question to get started.";
-    elements.threadsList.append(empty);
-    return;
-  }
-  for (const thread of state.groupThreads) {
-    const li = document.createElement("li");
-    li.className = `thread-item${thread.resolved ? " is-resolved" : ""}`;
-    li.dataset.threadId = thread.id;
-
-    const main = document.createElement("div");
-    main.className = "thread-main";
-
-    const header = document.createElement("div");
-    header.className = "thread-header";
-    const authorEl = document.createElement("span");
-    authorEl.className = "thread-author";
-    authorEl.textContent = thread.author;
-    const timeEl = document.createElement("span");
-    timeEl.className = "thread-time";
-    timeEl.textContent = formatRelativeTime(thread.createdAt);
-    header.append(authorEl, timeEl);
-    if (thread.resolved) {
-      const badge = document.createElement("span");
-      badge.className = "thread-resolved-badge";
-      badge.textContent = "Resolved";
-      header.append(badge);
-    }
-
-    const textEl = document.createElement("div");
-    textEl.className = "thread-text";
-    textEl.appendChild(renderTextWithMentions(thread.text));
-
-    const actionsEl = document.createElement("div");
-    actionsEl.className = "thread-actions";
-
-    const replyBtn = document.createElement("button");
-    replyBtn.type = "button";
-    replyBtn.className = "icon-button";
-    replyBtn.textContent = `Reply${thread.replies.length > 0 ? ` (${thread.replies.length})` : ""}`;
-    replyBtn.addEventListener("click", () => {
-      state.openReplyThreadId = state.openReplyThreadId === thread.id ? null : thread.id;
-      renderThreads();
-    });
-
-    const resolveBtn = document.createElement("button");
-    resolveBtn.type = "button";
-    resolveBtn.className = "icon-button";
-    resolveBtn.textContent = thread.resolved ? "Unresolve" : "Resolve";
-    resolveBtn.addEventListener("click", async () => {
-      try { await toggleResolveThread(thread.id); } catch (err) { alert(err.message || "Failed."); }
-    });
-
-    const deleteBtn = document.createElement("button");
-    deleteBtn.type = "button";
-    deleteBtn.className = "icon-button";
-    deleteBtn.textContent = "Delete";
-    deleteBtn.addEventListener("click", async () => {
-      if (!confirm("Delete this thread and all its replies?")) return;
-      try { await deleteThread(thread.id); } catch (err) { alert(err.message || "Failed."); }
-    });
-
-    actionsEl.append(replyBtn, resolveBtn, deleteBtn);
-    main.append(header, textEl, actionsEl);
-    li.append(main);
-
-    if (thread.replies.length > 0 || state.openReplyThreadId === thread.id) {
-      const repliesEl = document.createElement("div");
-      repliesEl.className = "thread-replies";
-      for (const reply of thread.replies) {
-        const replyItem = document.createElement("div");
-        replyItem.className = "reply-item";
-        const rHeader = document.createElement("div");
-        rHeader.className = "reply-header";
-        const rAuthor = document.createElement("span");
-        rAuthor.className = "reply-author";
-        rAuthor.textContent = reply.author;
-        const rTime = document.createElement("span");
-        rTime.className = "reply-time";
-        rTime.textContent = formatRelativeTime(reply.createdAt);
-        rHeader.append(rAuthor, rTime);
-        const rText = document.createElement("div");
-        rText.className = "reply-text";
-        rText.appendChild(renderTextWithMentions(reply.text));
-        replyItem.append(rHeader, rText);
-        repliesEl.append(replyItem);
-      }
-      if (state.openReplyThreadId === thread.id) {
-        const replyForm = document.createElement("div");
-        replyForm.className = "reply-form";
-        const replyInput = document.createElement("input");
-        replyInput.className = "reply-input";
-        replyInput.placeholder = "Write a reply…";
-        replyInput.maxLength = 1000;
-        replyInput.autocomplete = "off";
-        const submitBtn = document.createElement("button");
-        submitBtn.type = "button";
-        submitBtn.className = "icon-button";
-        submitBtn.textContent = "Send";
-        const doReply = async () => {
-          const text = replyInput.value.trim();
-          if (!text) return;
-          try { await replyToThread(thread.id, text); } catch (err) { alert(err.message || "Failed."); }
-        };
-        submitBtn.addEventListener("click", doReply);
-        replyInput.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); doReply(); } });
-        replyForm.append(replyInput, submitBtn);
-        repliesEl.append(replyForm);
-        requestAnimationFrame(() => replyInput.focus());
-      }
-      li.append(repliesEl);
-    }
-
-    elements.threadsList.append(li);
-  }
-}
-
-// @mention dropdown logic
-function getMentionState(input) {
-  const val = input.value;
-  const cursor = input.selectionStart;
-  const before = val.slice(0, cursor);
-  const atIdx = before.lastIndexOf("@");
-  if (atIdx === -1) return null;
-  const textAfterAt = before.slice(atIdx + 1);
-  if (/\s/.test(textAfterAt)) return null;
-  return { atIdx, query: textAfterAt.toLowerCase() };
-}
-
-function updateMentionDropdown(input) {
-  const ms = getMentionState(input);
-  if (!ms) { hideMentionDropdown(); return; }
-  const { query } = ms;
-  const allFiles = getAllFiles();
-  const matches = allFiles.filter((f) => f.name.toLowerCase().includes(query) || f.subjectName.toLowerCase().includes(query));
-  if (matches.length === 0) { hideMentionDropdown(); return; }
-  state.mentionQuery = query;
-  if (state.mentionHighlight >= matches.length) state.mentionHighlight = 0;
-  elements.mentionDropdown.innerHTML = "";
-  for (let i = 0; i < matches.length; i++) {
-    const file = matches[i];
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = `mention-option${i === state.mentionHighlight ? " is-highlighted" : ""}`;
-    const nameEl = document.createElement("span");
-    nameEl.className = "mention-option-name";
-    nameEl.textContent = fileIcon(file.mimeType) + " " + file.name;
-    const subEl = document.createElement("span");
-    subEl.className = "mention-option-subject";
-    subEl.textContent = file.folderName ? `${file.subjectName} / ${file.folderName}` : file.subjectName;
-    btn.append(nameEl, subEl);
-    btn.addEventListener("mousedown", (e) => { e.preventDefault(); insertMention(input, file, ms.atIdx); });
-    elements.mentionDropdown.append(btn);
-  }
-  elements.mentionDropdown.hidden = false;
-}
-
-function hideMentionDropdown() {
-  elements.mentionDropdown.hidden = true;
-  state.mentionHighlight = 0;
-}
-
-function insertMention(input, file, atIdx) {
-  const before = input.value.slice(0, atIdx);
-  const after = input.value.slice(input.selectionStart);
-  const mention = `@[${file.name}](${file.id})`;
-  input.value = before + mention + (after.startsWith(" ") ? after : " " + after);
-  const newPos = before.length + mention.length + 1;
-  input.setSelectionRange(newPos, newPos);
-  hideMentionDropdown();
-  input.focus();
-}
-
-function parseMentionedFileIds(text) {
-  const ids = [];
-  const regex = /@\[([^\]]+)\]\(([^)]+)\)/g;
-  let match;
-  while ((match = regex.exec(text)) !== null) ids.push(match[2]);
-  return ids;
-}
-
 function setGroupTab(tab) {
   if (!elements.groupTabRooms || !elements.groupTabMaterial || !elements.groupBodyRooms || !elements.groupBodyMaterial) {
     return;
@@ -3629,7 +3581,6 @@ function setGroupTab(tab) {
   elements.groupBodyMaterial.hidden = tab !== "material";
   if (tab === "material" && state.groupMaterials.length === 0) {
     fetchGroupMaterials();
-    fetchGroupThreads();
   }
 }
 
@@ -3659,6 +3610,13 @@ function bindMaterialEvents() {
     elements.fileUploadInput.value = "";
     elements.fileUploadInput.click();
   });
+  elements.subjectFileSearchInput?.addEventListener("input", () => {
+    state.materialFileQuery = elements.subjectFileSearchInput.value.trim();
+    renderSubjectDetail();
+    requestAnimationFrame(() => {
+      elements.subjectFileSearchInput?.focus();
+    });
+  });
 
   elements.addSubjectButton.addEventListener("click", () => {
     elements.newSubjectForm.hidden = !elements.newSubjectForm.hidden;
@@ -3687,39 +3645,6 @@ function bindMaterialEvents() {
     state.pendingUploadFolderId = null;
   });
 
-  elements.newThreadForm.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const text = elements.threadInput.value.trim();
-    if (!text) return;
-    hideMentionDropdown();
-    try {
-      await postThread(text, parseMentionedFileIds(text));
-      elements.threadInput.value = "";
-    } catch (err) {
-      alert(err.message || "Could not post.");
-    }
-  });
-
-  elements.threadInput.addEventListener("input", () => updateMentionDropdown(elements.threadInput));
-  elements.threadInput.addEventListener("keydown", (e) => {
-    if (elements.mentionDropdown.hidden) return;
-    const options = [...elements.mentionDropdown.querySelectorAll(".mention-option")];
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      state.mentionHighlight = (state.mentionHighlight + 1) % options.length;
-      options.forEach((o, i) => o.classList.toggle("is-highlighted", i === state.mentionHighlight));
-    } else if (e.key === "ArrowUp") {
-      e.preventDefault();
-      state.mentionHighlight = (state.mentionHighlight - 1 + options.length) % options.length;
-      options.forEach((o, i) => o.classList.toggle("is-highlighted", i === state.mentionHighlight));
-    } else if (e.key === "Enter" && !elements.mentionDropdown.hidden) {
-      e.preventDefault();
-      options[state.mentionHighlight]?.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
-    } else if (e.key === "Escape") {
-      hideMentionDropdown();
-    }
-  });
-  elements.threadInput.addEventListener("blur", () => setTimeout(hideMentionDropdown, 150));
 }
 
 let lastRenderedTime = "";

@@ -16,6 +16,11 @@ const groupsFile = path.join(dataDir, "groups.json");
 const threadsFile = path.join(dataDir, "threads.json");
 const filesDir = path.join(dataDir, "files");
 const PORT = Number(process.env.PORT || 5173);
+const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL || `http://localhost:${PORT}`;
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || "";
+const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || "";
+const GOOGLE_REDIRECT_URI = process.env.GOOGLE_REDIRECT_URI || `${PUBLIC_BASE_URL}/api/google/callback`;
+const GOOGLE_DRIVE_FOLDER_ID = process.env.GOOGLE_DRIVE_FOLDER_ID || "";
 const MAX_CHAT_MESSAGES = 80;
 const MAX_HISTORY_ITEMS = 10;
 const MAX_QUEUE_PER_USER = 5;
@@ -43,6 +48,7 @@ const users = loadUsers();
 const groups = loadGroups();
 const threadsByGroup = loadThreads();
 const authTokens = new Map();
+const googleOAuthStates = new Map();
 const rooms = new Map();
 const sockets = new Map();
 const activeClientsByUsername = new Map();
@@ -320,7 +326,11 @@ function getUserFromToken(token) {
 }
 
 function sanitizeUser(user) {
-  return user ? { username: user.username, createdAt: user.createdAt } : null;
+  return user ? {
+    username: user.username,
+    createdAt: user.createdAt,
+    googleDriveConnected: Boolean(user.googleDrive?.refreshToken)
+  } : null;
 }
 
 function extractToken(request) {
@@ -352,6 +362,14 @@ function sendJson(response, statusCode, payload) {
     "Cache-Control": "no-store"
   });
   response.end(JSON.stringify(payload));
+}
+
+function redirect(response, location) {
+  response.writeHead(302, {
+    Location: location,
+    "Cache-Control": "no-store"
+  });
+  response.end();
 }
 
 function sendText(response, statusCode, text) {
@@ -405,14 +423,127 @@ function addHistory(room, by, text) {
   room.history = room.history.slice(0, MAX_HISTORY_ITEMS);
 }
 
-function addChat(room, author, text) {
+function findGroupFile(groupId, subjectId, fileId) {
+  const group = groups.get(groupId);
+  if (!group) return null;
+  const subject = normalizeMaterials(group).find((item) => item.id === subjectId);
+  if (!subject) return null;
+  const file = (subject.files || []).find((item) => item.id === fileId);
+  if (!file) return null;
+  const folder = (subject.folders || []).find((item) => item.id === file.folderId);
+  return {
+    id: file.id,
+    subjectId: subject.id,
+    subjectName: subject.name,
+    folderId: file.folderId || DEFAULT_FILES_FOLDER_ID,
+    folderName: folder?.name || "Files",
+    name: file.name,
+    mimeType: file.mimeType || "application/octet-stream",
+    size: file.size || 0,
+    webViewLink: file.webViewLink || "",
+    webContentLink: file.webContentLink || ""
+  };
+}
+
+function addChat(room, author, text, file = null) {
   room.messages.push({
     id: crypto.randomUUID(),
     at: Date.now(),
     author,
-    text
+    text,
+    file
   });
   room.messages = room.messages.slice(-MAX_CHAT_MESSAGES);
+}
+
+function googleDriveConfigured() {
+  return Boolean(GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET && GOOGLE_REDIRECT_URI);
+}
+
+async function exchangeGoogleCode(code) {
+  const body = new URLSearchParams({
+    code,
+    client_id: GOOGLE_CLIENT_ID,
+    client_secret: GOOGLE_CLIENT_SECRET,
+    redirect_uri: GOOGLE_REDIRECT_URI,
+    grant_type: "authorization_code"
+  });
+  const res = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error_description || data.error || "Google authorization failed.");
+  return data;
+}
+
+async function refreshGoogleAccessToken(user) {
+  const refreshToken = user.googleDrive?.refreshToken;
+  if (!refreshToken) throw new Error("Google Drive is not connected.");
+  const body = new URLSearchParams({
+    client_id: GOOGLE_CLIENT_ID,
+    client_secret: GOOGLE_CLIENT_SECRET,
+    refresh_token: refreshToken,
+    grant_type: "refresh_token"
+  });
+  const res = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error_description || data.error || "Could not refresh Google Drive access.");
+  return data.access_token;
+}
+
+async function uploadToGoogleDrive(user, { name, mimeType, buffer }) {
+  if (!googleDriveConfigured()) {
+    const err = new Error("Google Drive is not configured.");
+    err.code = "google_drive_not_configured";
+    throw err;
+  }
+  if (!user.googleDrive?.refreshToken) {
+    const err = new Error("Connect Google Drive before uploading files.");
+    err.code = "google_drive_required";
+    throw err;
+  }
+  const accessToken = await refreshGoogleAccessToken(user);
+  const boundary = `pmdr-${crypto.randomBytes(12).toString("hex")}`;
+  const metadata = {
+    name,
+    ...(GOOGLE_DRIVE_FOLDER_ID ? { parents: [GOOGLE_DRIVE_FOLDER_ID] } : {})
+  };
+  const body = Buffer.concat([
+    Buffer.from(`--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n`),
+    Buffer.from(`--${boundary}\r\nContent-Type: ${mimeType}\r\n\r\n`),
+    buffer,
+    Buffer.from(`\r\n--${boundary}--\r\n`)
+  ]);
+  const uploadRes = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,mimeType,size,webViewLink,webContentLink", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": `multipart/related; boundary=${boundary}`,
+      "Content-Length": String(body.length)
+    },
+    body
+  });
+  const file = await uploadRes.json().catch(() => ({}));
+  if (!uploadRes.ok) throw new Error(file.error?.message || "Google Drive upload failed.");
+  const permissionRes = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(file.id)}/permissions`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ role: "reader", type: "anyone" })
+  });
+  if (!permissionRes.ok) {
+    const data = await permissionRes.json().catch(() => ({}));
+    throw new Error(data.error?.message || "Could not share Google Drive file.");
+  }
+  return file;
 }
 
 function tracksReservedByUser(room, username) {
@@ -450,6 +581,7 @@ function snapshot(room, client = null) {
   return {
     type: "snapshot",
     room: room.id,
+    groupId: room.groupId,
     isHost: Boolean(client?.isHost),
     viewer: client
       ? {
@@ -728,14 +860,20 @@ function handleTimerCommand(client, message) {
 function handleChatMessage(client, message) {
   const room = client.room;
   const text = String(message.text || "").trim().slice(0, 300);
-  if (!text) {
+  let file = null;
+  if (message.file && room.groupId) {
+    const subjectId = String(message.file.subjectId || "");
+    const fileId = String(message.file.id || "");
+    file = findGroupFile(room.groupId, subjectId, fileId);
+  }
+  if (!text && !file) {
     return false;
   }
 
   addChat(room, {
     username: client.user.username,
     name: client.participant.name
-  }, text);
+  }, text, file);
   return true;
 }
 
@@ -1122,6 +1260,67 @@ async function handleAuthRequest(request, response, url) {
   return false;
 }
 
+async function handleGoogleRequest(request, response, url) {
+  if (!url.pathname.startsWith("/api/google")) return false;
+
+  if (request.method === "GET" && url.pathname === "/api/google/connect") {
+    const user = getUserFromToken(extractToken(request));
+    if (!user) { sendJson(response, 401, { error: "Unauthorized" }); return true; }
+    if (!googleDriveConfigured()) {
+      sendJson(response, 503, { error: "Google Drive is not configured on this server." });
+      return true;
+    }
+    const state = crypto.randomBytes(18).toString("hex");
+    googleOAuthStates.set(state, { username: user.username, createdAt: Date.now() });
+    const authUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
+    authUrl.searchParams.set("client_id", GOOGLE_CLIENT_ID);
+    authUrl.searchParams.set("redirect_uri", GOOGLE_REDIRECT_URI);
+    authUrl.searchParams.set("response_type", "code");
+    authUrl.searchParams.set("scope", "https://www.googleapis.com/auth/drive.file");
+    authUrl.searchParams.set("access_type", "offline");
+    authUrl.searchParams.set("prompt", "consent");
+    authUrl.searchParams.set("state", state);
+    sendJson(response, 200, { url: authUrl.toString() });
+    return true;
+  }
+
+  if (request.method === "GET" && url.pathname === "/api/google/callback") {
+    const state = String(url.searchParams.get("state") || "");
+    const code = String(url.searchParams.get("code") || "");
+    const stateData = googleOAuthStates.get(state);
+    googleOAuthStates.delete(state);
+    if (!stateData || !code) {
+      sendText(response, 400, "Google Drive connection failed.");
+      return true;
+    }
+    const user = users.get(stateData.username);
+    if (!user) {
+      sendText(response, 404, "User not found.");
+      return true;
+    }
+    try {
+      const tokenData = await exchangeGoogleCode(code);
+      if (!tokenData.refresh_token) {
+        sendText(response, 400, "Google did not return a refresh token. Try connecting again.");
+        return true;
+      }
+      user.googleDrive = {
+        refreshToken: tokenData.refresh_token,
+        scope: tokenData.scope || "",
+        connectedAt: Date.now()
+      };
+      persistUsers();
+      response.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
+      response.end("<!doctype html><title>Google Drive connected</title><p>Google Drive connected. You can close this tab.</p><script>window.opener&&window.opener.postMessage({type:'google-drive-connected'},'*');setTimeout(()=>window.close(),800);</script>");
+    } catch (error) {
+      sendText(response, 500, error instanceof Error ? error.message : "Google Drive connection failed.");
+    }
+    return true;
+  }
+
+  return false;
+}
+
 async function handleYoutubeSearchRequest(request, response, url) {
   if (request.method !== "GET" || url.pathname !== "/api/youtube-search") {
     return false;
@@ -1347,6 +1546,10 @@ async function handleGroupRequest(request, response, url) {
     if (!subject) { sendJson(response, 404, { error: "Subject not found." }); return true; }
     const fileMeta = (subject.files || []).find((f) => f.id === fileId);
     if (!fileMeta) { sendJson(response, 404, { error: "File not found." }); return true; }
+    if (fileMeta.webContentLink || fileMeta.webViewLink) {
+      redirect(response, fileMeta.webContentLink || fileMeta.webViewLink);
+      return true;
+    }
     const filePath = path.join(getGroupFileDir(groupId, subjectId), fileId);
     if (!fs.existsSync(filePath)) { sendJson(response, 404, { error: "File data not found." }); return true; }
     const fileData = fs.readFileSync(filePath);
@@ -1370,6 +1573,10 @@ async function handleGroupRequest(request, response, url) {
     if (!subject) { sendJson(response, 404, { error: "Subject not found." }); return true; }
     const fileMeta = (subject.files || []).find((f) => f.id === fileId);
     if (!fileMeta) { sendJson(response, 404, { error: "File not found." }); return true; }
+    if (fileMeta.webViewLink || fileMeta.webContentLink) {
+      redirect(response, fileMeta.webViewLink || fileMeta.webContentLink);
+      return true;
+    }
     const filePath = path.join(getGroupFileDir(groupId, subjectId), fileId);
     if (!fs.existsSync(filePath)) { sendJson(response, 404, { error: "File data not found." }); return true; }
     const fileData = fs.readFileSync(filePath);
@@ -1414,7 +1621,9 @@ async function handleGroupRequest(request, response, url) {
       sendJson(response, 200, { file: subject.files[fileIdx] });
       return true;
     }
-    deleteGroupFile(groupId, subjectId, fileId);
+    if (!subject.files[fileIdx].driveFileId) {
+      deleteGroupFile(groupId, subjectId, fileId);
+    }
     subject.files.splice(fileIdx, 1);
     persistGroups();
     sendJson(response, 200, { ok: true });
@@ -1440,10 +1649,28 @@ async function handleGroupRequest(request, response, url) {
       return true;
     }
     const fileBuffer = Buffer.from(base64Data, "base64");
-    if (fileBuffer.length > 5_242_880) { sendJson(response, 400, { error: "File too large (max 5 MB)." }); return true; }
     const fileId = `file-${crypto.randomBytes(6).toString("hex")}`;
-    saveGroupFile(groupId, subjectId, fileId, fileBuffer);
-    const fileMeta = { id: fileId, name: fileName, mimeType, size: fileBuffer.length, folderId, uploadedBy: user.username, uploadedAt: Date.now() };
+    let driveFile;
+    try {
+      driveFile = await uploadToGoogleDrive(user, { name: fileName, mimeType, buffer: fileBuffer });
+    } catch (error) {
+      const code = error?.code || "google_drive_upload_failed";
+      const status = code === "google_drive_required" ? 428 : code === "google_drive_not_configured" ? 503 : 502;
+      sendJson(response, status, { error: error instanceof Error ? error.message : "Google Drive upload failed.", code });
+      return true;
+    }
+    const fileMeta = {
+      id: fileId,
+      driveFileId: driveFile.id,
+      name: driveFile.name || fileName,
+      mimeType: driveFile.mimeType || mimeType,
+      size: Number(driveFile.size || fileBuffer.length),
+      folderId,
+      uploadedBy: user.username,
+      uploadedAt: Date.now(),
+      webViewLink: driveFile.webViewLink || "",
+      webContentLink: driveFile.webContentLink || ""
+    };
     subject.files = subject.files || [];
     subject.files.push(fileMeta);
     persistGroups();
@@ -1569,6 +1796,10 @@ async function handleHttpRequest(request, response) {
     }
 
     if (await handleAuthRequest(request, response, url)) {
+      return;
+    }
+
+    if (await handleGoogleRequest(request, response, url)) {
       return;
     }
 

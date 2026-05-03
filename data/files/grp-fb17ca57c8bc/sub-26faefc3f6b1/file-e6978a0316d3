@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>회로 미분방정식 연습문제 10선</title>
+<script>
+MathJax = {
+  tex: { inlineMath: [['$', '$'], ['\\(', '\\)']], displayMath: [['$$', '$$'], ['\\[', '\\]']] },
+  svg: { fontCache: 'global' }
+};
+</script>
+<script async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+<style>
+  body {
+    font-family: 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', sans-serif;
+    max-width: 820px;
+    margin: 40px auto;
+    padding: 0 24px 60px;
+    line-height: 1.75;
+    color: #1a1a1a;
+    background: #fafafa;
+  }
+  h1 {
+    text-align: center;
+    border-bottom: 3px solid #2c3e50;
+    padding-bottom: 12px;
+    color: #2c3e50;
+  }
+  .intro {
+    background: #eef4fb;
+    padding: 16px 20px;
+    border-radius: 8px;
+    border-left: 4px solid #3498db;
+    margin: 24px 0 40px;
+    font-size: 0.95em;
+  }
+  .problem {
+    background: #fff;
+    padding: 22px 28px;
+    margin: 32px 0;
+    border-radius: 10px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    border-left: 5px solid #e74c3c;
+  }
+  .problem h2 {
+    color: #c0392b;
+    margin-top: 0;
+    font-size: 1.15em;
+  }
+  .tag {
+    display: inline-block;
+    background: #fce4e4;
+    color: #c0392b;
+    padding: 2px 10px;
+    border-radius: 12px;
+    font-size: 0.8em;
+    margin-left: 8px;
+    font-weight: normal;
+    vertical-align: middle;
+  }
+  .tag.easy { background: #e8f5e9; color: #2e7d32; }
+  .tag.medium { background: #fff8e1; color: #ef6c00; }
+  .tag.hard { background: #fce4e4; color: #c0392b; }
+  .question {
+    margin: 10px 0 18px;
+  }
+  .solution {
+    background: #f8f9fc;
+    padding: 16px 22px;
+    margin-top: 14px;
+    border-radius: 8px;
+    border-left: 3px solid #3498db;
+  }
+  .solution-header {
+    font-weight: bold;
+    color: #2980b9;
+    cursor: pointer;
+    user-select: none;
+    margin-bottom: 8px;
+  }
+  .solution-header::before {
+    content: "▼ ";
+    font-size: 0.8em;
+  }
+  .solution.collapsed .solution-body { display: none; }
+  .solution.collapsed .solution-header::before { content: "▶ "; }
+  .answer-box {
+    background: #fff3cd;
+    padding: 10px 16px;
+    border-radius: 6px;
+    border-left: 3px solid #f39c12;
+    margin-top: 12px;
+    font-weight: 500;
+  }
+  .circuit {
+    font-family: 'Courier New', monospace;
+    background: #2c3e50;
+    color: #ecf0f1;
+    padding: 14px;
+    border-radius: 6px;
+    font-size: 0.85em;
+    margin: 10px 0;
+    white-space: pre;
+    overflow-x: auto;
+  }
+  .controls {
+    text-align: center;
+    margin: 20px 0;
+  }
+  .controls button {
+    background: #3498db;
+    color: white;
+    border: none;
+    padding: 8px 18px;
+    border-radius: 6px;
+    cursor: pointer;
+    margin: 0 4px;
+    font-size: 0.9em;
+  }
+  .controls button:hover { background: #2980b9; }
+  hr { border: none; border-top: 1px dashed #bbb; margin: 10px 0; }
+  .step-label { color: #16a085; font-weight: 600; }
+</style>
+</head>
+<body>
+
+<h1>회로 미분방정식 연습문제 10선</h1>
+<p style="text-align:center; color:#666;">V(전원), R(저항), L(코일), C(축전기) — 시간에 대한 함수 구하기</p>
+
+<div class="intro">
+<b>공통 준비물</b><br>
+• 키르히호프 전압 법칙(KVL): 폐회로 한 바퀴 전압 강하 합 = 0<br>
+• 인덕터 전압: $V_L = L\,\dfrac{dI}{dt}$ &nbsp;|&nbsp; 축전기 전압: $V_C = \dfrac{q}{C}$, &nbsp; $I = \dfrac{dq}{dt}$<br>
+• 시정수: RL → $\tau = L/R$, &nbsp; RC → $\tau = RC$<br>
+• RLC 각진동수: $\omega_0 = 1/\sqrt{LC}$, &nbsp; 감쇠상수: $\gamma = R/(2L)$
+</div>
+
+<div class="controls">
+<button onclick="toggleAll(false)">전체 풀이 펼치기</button>
+<button onclick="toggleAll(true)">전체 풀이 접기</button>
+</div>
+
+<!-- ========== 문제 1 ========== -->
+<div class="problem">
+<h2>문제 1. RL 직렬회로 — 스위치 ON <span class="tag easy">기초</span></h2>
+<div class="question">
+기전력 $V_0$인 전지, 저항 $R$, 자체 인덕턴스 $L$인 코일이 직렬로 연결되어 있다. $t=0$에서 스위치를 닫았고, 닫기 직전 코일의 전류는 0이었다. 시간에 따른 전류 $I(t)$를 구하시오.
+</div>
+<div class="circuit">  V₀ ─── R ───[L]───┐
+   │                │
+   └──── 스위치 S ───┘</div>
+
+<div class="solution">
+<div class="solution-header" onclick="this.parentElement.classList.toggle('collapsed')">풀이</div>
+<div class="solution-body">
+<p><span class="step-label">① KVL:</span> $V_0 - IR - L\dfrac{dI}{dt} = 0$</p>
+<p><span class="step-label">② 표준형:</span> $\dfrac{dI}{dt} + \dfrac{R}{L}I = \dfrac{V_0}{L}$</p>
+<p><span class="step-label">③ 적분인자:</span> $\mu = e^{Rt/L}$를 양변에 곱하면
+$$\dfrac{d}{dt}\left(I\, e^{Rt/L}\right) = \dfrac{V_0}{L}e^{Rt/L}$$</p>
+<p><span class="step-label">④ 적분:</span> $I\,e^{Rt/L} = \dfrac{V_0}{R}e^{Rt/L} + C_1$</p>
+<p><span class="step-label">⑤ 초기조건 $I(0)=0$:</span> $C_1 = -\dfrac{V_0}{R}$</p>
+<div class="answer-box">
+$$\boxed{\;I(t) = \dfrac{V_0}{R}\left(1 - e^{-Rt/L}\right)\;}$$
+시정수 $\tau=L/R$이며, $t\to\infty$일 때 $I\to V_0/R$로 수렴.
+</div>
+</div>
+</div>
+</div>
+
+<!-- ========== 문제 2 ========== -->
+<div class="problem">
+<h2>문제 2. RL 직렬회로 — 스위치 OFF (방전) <span class="tag easy">기초</span></h2>
+<div class="question">
+문제 1의 회로에서 전류가 $I_0 = V_0/R$로 안정화된 상태이다. 새로운 시각 $t=0$에 전지를 제거하고 회로를 코일과 저항만으로 단락시킬 때, 전류 $I(t)$를 구하시오.
+</div>
+
+<div class="solution">
+<div class="solution-header" onclick="this.parentElement.classList.toggle('collapsed')">풀이</div>
+<div class="solution-body">
+<p><span class="step-label">① KVL:</span> $-IR - L\dfrac{dI}{dt} = 0 \;\Rightarrow\; \dfrac{dI}{dt} = -\dfrac{R}{L}I$</p>
+<p><span class="step-label">② 변수분리:</span> $\dfrac{dI}{I} = -\dfrac{R}{L}dt$</p>
+<p><span class="step-label">③ 적분:</span> $\ln I = -\dfrac{R}{L}t + C_1 \;\Rightarrow\; I(t) = A\, e^{-Rt/L}$</p>
+<p><span class="step-label">④ 초기조건 $I(0)=I_0$:</span> $A = I_0$</p>
+<div class="answer-box">
+$$\boxed{\;I(t) = \dfrac{V_0}{R}\, e^{-Rt/L}\;}$$
+코일에 저장된 자기 에너지 $\tfrac{1}{2}LI_0^2$가 저항에서 열로 소모됨.
+</div>
+</div>
+</div>
+</div>
+
+<!-- ========== 문제 3 ========== -->
+<div class="problem">
+<h2>문제 3. RC 직렬회로 — 축전기 충전 <span class="tag easy">기초</span></h2>
+<div class="question">
+기전력 $V_0$, 저항 $R$, 전기용량 $C$인 축전기가 직렬로 연결되어 있다. $t=0$에서 스위치를 닫았고 축전기의 초기 전하는 0이다. 전하 $q(t)$와 전류 $I(t)$를 구하시오.
+</div>
+
+<div class="solution">
+<div class="solution-header" onclick="this.parentElement.classList.toggle('collapsed')">풀이</div>
+<div class="solution-body">
+<p><span class="step-label">① KVL:</span> $V_0 - IR - \dfrac{q}{C} = 0$, &nbsp; $I = \dfrac{dq}{dt}$ 대입</p>
+<p>$\Rightarrow \; R\dfrac{dq}{dt} + \dfrac{q}{C} = V_0$</p>
+<p><span class="step-label">② 표준형:</span> $\dfrac{dq}{dt} + \dfrac{1}{RC}q = \dfrac{V_0}{R}$</p>
+<p><span class="step-label">③ 적분인자 $\mu = e^{t/RC}$:</span></p>
+<p>$\dfrac{d}{dt}(q\,e^{t/RC}) = \dfrac{V_0}{R}e^{t/RC}$</p>
+<p><span class="step-label">④ 적분 + $q(0)=0$:</span></p>
+<div class="answer-box">
+$$\boxed{\;q(t) = CV_0\left(1 - e^{-t/RC}\right), \quad I(t) = \dfrac{V_0}{R}\,e^{-t/RC}\;}$$
+시정수 $\tau=RC$. $t\to\infty$에서 $q\to CV_0$, $I\to 0$.
+</div>
+</div>
+</div>
+</div>
+
+<!-- ========== 문제 4 ========== -->
+<div class="problem">
+<h2>문제 4. RC 회로 — 축전기 방전 <span class="tag easy">기초</span></h2>
+<div class="question">
+전기용량 $C$인 축전기가 전하 $q_0$로 충전되어 있다. $t=0$에서 저항 $R$과 연결되어 방전이 시작된다. $q(t)$를 구하시오.
+</div>
+
+<div class="solution">
+<div class="solution-header" onclick="this.parentElement.classList.toggle('collapsed')">풀이</div>
+<div class="solution-body">
+<p><span class="step-label">① KVL:</span> $\dfrac{q}{C} + R\dfrac{dq}{dt} = 0$</p>
+<p>(방전 방향으로 전류가 흘러 축전기 전하가 감소)</p>
+<p><span class="step-label">② 변수분리:</span> $\dfrac{dq}{q} = -\dfrac{1}{RC}dt$</p>
+<p><span class="step-label">③ 초기조건 $q(0)=q_0$:</span></p>
+<div class="answer-box">
+$$\boxed{\;q(t) = q_0\, e^{-t/RC}\;}$$
+전류는 $I(t) = -\dfrac{dq}{dt} = \dfrac{q_0}{RC}e^{-t/RC}$.
+</div>
+</div>
+</div>
+</div>
+
+<!-- ========== 문제 5 ========== -->
+<div class="problem">
+<h2>문제 5. LC 진동 회로 <span class="tag medium">중급</span></h2>
+<div class="question">
+저항이 없는 이상적인 회로에서 코일 $L$과 축전기 $C$가 연결되어 있다. $t=0$에서 축전기 전하는 $q_0$, 전류는 0이다. 전하 $q(t)$를 구하시오.
+</div>
+
+<div class="solution">
+<div class="solution-header" onclick="this.parentElement.classList.toggle('collapsed')">풀이</div>
+<div class="solution-body">
+<p><span class="step-label">① KVL:</span> $\dfrac{q}{C} + L\dfrac{dI}{dt} = 0$</p>
+<p>$I = \dfrac{dq}{dt}$ 이므로 $\dfrac{dI}{dt} = \dfrac{d^2 q}{dt^2}$</p>
+<p><span class="step-label">② 미분방정식:</span></p>
+<p>$$L\dfrac{d^2 q}{dt^2} + \dfrac{q}{C} = 0 \;\Rightarrow\; \dfrac{d^2q}{dt^2} + \omega_0^2\, q = 0$$</p>
+<p>여기서 $\omega_0 = \dfrac{1}{\sqrt{LC}}$</p>
+<p><span class="step-label">③ 일반해:</span> $q(t) = A\cos\omega_0 t + B\sin\omega_0 t$</p>
+<p><span class="step-label">④ 초기조건:</span> $q(0)=q_0 \Rightarrow A=q_0$, &nbsp; $I(0)=\dot q(0)=0 \Rightarrow B=0$</p>
+<div class="answer-box">
+$$\boxed{\;q(t) = q_0\cos\omega_0 t, \quad I(t) = -q_0\,\omega_0\sin\omega_0 t\;}$$
+단조화 진동. 주기 $T = 2\pi\sqrt{LC}$. 에너지는 $L$과 $C$ 사이를 왕복.
+</div>
+</div>
+</div>
+</div>
+
+<!-- ========== 문제 6 ========== -->
+<div class="problem">
+<h2>문제 6. RLC 직렬회로 — 부족감쇠(underdamped) <span class="tag medium">중급</span></h2>
+<div class="question">
+$R$, $L$, $C$가 직렬로 연결되고 축전기는 $q_0$로 충전되어 있다. 전지는 없고, $R^2 &lt; 4L/C$인 경우 $t&gt;0$에서 $q(t)$를 구하시오. (초기 전류 = 0)
+</div>
+
+<div class="solution">
+<div class="solution-header" onclick="this.parentElement.classList.toggle('collapsed')">풀이</div>
+<div class="solution-body">
+<p><span class="step-label">① KVL:</span> $L\dfrac{d^2 q}{dt^2} + R\dfrac{dq}{dt} + \dfrac{q}{C} = 0$</p>
+<p><span class="step-label">② 특성방정식:</span> $Lr^2 + Rr + \dfrac{1}{C} = 0$</p>
+<p>$r = -\dfrac{R}{2L} \pm \sqrt{\left(\dfrac{R}{2L}\right)^2 - \dfrac{1}{LC}}$</p>
+<p><span class="step-label">③ 감쇠상수와 감쇠 진동수 정의:</span></p>
+<p>$\gamma = \dfrac{R}{2L}, \quad \omega_d = \sqrt{\dfrac{1}{LC} - \gamma^2}$</p>
+<p>$R^2 &lt; 4L/C \Rightarrow \gamma &lt; \omega_0$이므로 근은 복소수: $r = -\gamma \pm i\omega_d$</p>
+<p><span class="step-label">④ 일반해:</span> $q(t) = e^{-\gamma t}(A\cos\omega_d t + B\sin\omega_d t)$</p>
+<p><span class="step-label">⑤ 초기조건:</span> $q(0)=q_0 \Rightarrow A=q_0$</p>
+<p>$\dot q(0) = -\gamma A + \omega_d B = 0 \Rightarrow B = \dfrac{\gamma q_0}{\omega_d}$</p>
+<div class="answer-box">
+$$\boxed{\;q(t) = q_0\, e^{-\gamma t}\left(\cos\omega_d t + \dfrac{\gamma}{\omega_d}\sin\omega_d t\right)\;}$$
+진폭이 $e^{-\gamma t}$로 감쇠하는 진동.
+</div>
+</div>
+</div>
+</div>
+
+<!-- ========== 문제 7 ========== -->
+<div class="problem">
+<h2>문제 7. RLC 직렬회로 — 과감쇠(overdamped) <span class="tag hard">고급</span></h2>
+<div class="question">
+문제 6과 동일한 회로에서 $R^2 &gt; 4L/C$인 경우 $q(t)$를 구하시오. (같은 초기조건)
+</div>
+
+<div class="solution">
+<div class="solution-header" onclick="this.parentElement.classList.toggle('collapsed')">풀이</div>
+<div class="solution-body">
+<p><span class="step-label">① 특성근 (실수 두 개):</span></p>
+<p>$r_{1,2} = -\gamma \pm \alpha$, &nbsp; $\alpha = \sqrt{\gamma^2 - \omega_0^2}$</p>
+<p>(단, $\gamma = R/2L$, $\omega_0 = 1/\sqrt{LC}$)</p>
+<p><span class="step-label">② 일반해:</span> $q(t) = A e^{r_1 t} + B e^{r_2 t}$</p>
+<p><span class="step-label">③ 초기조건 연립:</span></p>
+<p>$A + B = q_0$</p>
+<p>$r_1 A + r_2 B = 0 \Rightarrow A = -\dfrac{r_2}{r_1-r_2}q_0, \; B = \dfrac{r_1}{r_1-r_2}q_0$</p>
+<div class="answer-box">
+$$\boxed{\;q(t) = \dfrac{q_0}{2\alpha}\Big[(\gamma+\alpha)e^{-(\gamma-\alpha)t} - (\gamma-\alpha)e^{-(\gamma+\alpha)t}\Big]\;}$$
+진동 없이 지수적으로 감쇠. $\alpha &lt; \gamma$이므로 두 항 모두 감소함.
+</div>
+</div>
+</div>
+</div>
+
+<!-- ========== 문제 8 ========== -->
+<div class="problem">
+<h2>문제 8. RLC 직렬회로 — 임계감쇠(critically damped) <span class="tag hard">고급</span></h2>
+<div class="question">
+$R^2 = 4L/C$인 특수한 경우 $q(t)$를 구하시오. (같은 초기조건)
+</div>
+
+<div class="solution">
+<div class="solution-header" onclick="this.parentElement.classList.toggle('collapsed')">풀이</div>
+<div class="solution-body">
+<p><span class="step-label">① 중근:</span> $r_1 = r_2 = -\gamma$</p>
+<p><span class="step-label">② 일반해 (중근이므로 $t$ 곱한 항 추가):</span></p>
+<p>$q(t) = (A + Bt)\, e^{-\gamma t}$</p>
+<p><span class="step-label">③ 초기조건:</span></p>
+<p>$q(0) = A = q_0$</p>
+<p>$\dot q(0) = B - \gamma A = 0 \Rightarrow B = \gamma q_0$</p>
+<div class="answer-box">
+$$\boxed{\;q(t) = q_0(1 + \gamma t)\, e^{-\gamma t}\;}$$
+진동 없이 가장 빠르게 평형으로 수렴. 전기공학에서 이상적인 응답 설계 기준.
+</div>
+</div>
+</div>
+</div>
+
+<!-- ========== 문제 9 ========== -->
+<div class="problem">
+<h2>문제 9. 교류 전원 RL 회로 (정상상태) <span class="tag hard">고급</span></h2>
+<div class="question">
+기전력 $V(t) = V_0\sin\omega t$인 교류 전원이 저항 $R$과 인덕턴스 $L$에 직렬로 연결되어 있다. 충분한 시간이 지나 과도 성분이 사라진 후의 정상상태 전류 $I(t)$를 구하시오.
+</div>
+
+<div class="solution">
+<div class="solution-header" onclick="this.parentElement.classList.toggle('collapsed')">풀이</div>
+<div class="solution-body">
+<p><span class="step-label">① 미분방정식:</span></p>
+<p>$L\dfrac{dI}{dt} + RI = V_0\sin\omega t$</p>
+<p><span class="step-label">② 정상상태 해 가정:</span> $I_p(t) = I_m\sin(\omega t - \phi)$</p>
+<p><span class="step-label">③ 대입 후 정리:</span></p>
+<p>$L\omega I_m\cos(\omega t-\phi) + R I_m\sin(\omega t-\phi) = V_0\sin\omega t$</p>
+<p>삼각함수 합성공식으로 좌변을 단일 사인으로:</p>
+<p>$I_m\sqrt{R^2+\omega^2 L^2}\,\sin(\omega t-\phi+\delta) = V_0\sin\omega t$</p>
+<p>단, $\tan\delta = \dfrac{\omega L}{R}$</p>
+<p><span class="step-label">④ 계수 비교:</span> $\phi = \delta$, $I_m\sqrt{R^2+\omega^2L^2}=V_0$</p>
+<div class="answer-box">
+$$\boxed{\;I(t) = \dfrac{V_0}{\sqrt{R^2+\omega^2 L^2}}\,\sin(\omega t - \phi), \quad \tan\phi = \dfrac{\omega L}{R}\;}$$
+임피던스 $Z=\sqrt{R^2+\omega^2L^2}$, 위상차 $\phi$만큼 전류가 전압보다 뒤짐.
+</div>
+</div>
+</div>
+</div>
+
+<!-- ========== 문제 10 ========== -->
+<div class="problem">
+<h2>문제 10. 2저항 + 코일 복합 회로 <span class="tag hard">고급</span></h2>
+<div class="question">
+기전력 $V_0$, 저항 $R_1$은 전지와 직렬, 저항 $R_2$와 인덕턴스 $L$은 서로 병렬로 연결되어 있다. $t=0$에서 스위치 $S$를 닫는다 (코일 초기 전류 $I(0)=0$). 코일에 흐르는 전류 $I(t)$를 구하시오.
+</div>
+<div class="circuit">  V₀ ── R₁ ──┬──── R₂ ────┐
+             │              │
+             └──── [L] ─────┤
+                            │
+             (공통 접지) ────┘</div>
+
+<div class="solution">
+<div class="solution-header" onclick="this.parentElement.classList.toggle('collapsed')">풀이</div>
+<div class="solution-body">
+<p><span class="step-label">① 변수 정의:</span> 전지 전류 $I_1$, 저항 $R_2$ 전류 $I_2$, 코일 전류 $I$</p>
+<p><span class="step-label">② KCL (접합점):</span> $I_1 = I_2 + I$</p>
+<p><span class="step-label">③ KVL (외곽 고리, 전지 → $R_1$ → $R_2$):</span></p>
+<p>$V_0 = R_1 I_1 + R_2 I_2$</p>
+<p><span class="step-label">④ KVL (오른쪽 고리, $R_2$ ↔ $L$ 병렬):</span></p>
+<p>$R_2 I_2 = L\dfrac{dI}{dt} \;\Rightarrow\; I_2 = \dfrac{L}{R_2}\dfrac{dI}{dt}$</p>
+<p><span class="step-label">⑤ $I_1 = I_2 + I$를 ③에 대입:</span></p>
+<p>$V_0 = R_1(I_2+I) + R_2 I_2 = (R_1+R_2)I_2 + R_1 I$</p>
+<p>$I_2$ 자리에 $\dfrac{L}{R_2}\dot I$ 대입:</p>
+<p>$V_0 = \dfrac{L(R_1+R_2)}{R_2}\dfrac{dI}{dt} + R_1 I$</p>
+<p><span class="step-label">⑥ 표준형 정리:</span></p>
+<p>$\dfrac{dI}{dt} + \dfrac{R_1 R_2}{L(R_1+R_2)}I = \dfrac{R_2 V_0}{L(R_1+R_2)}$</p>
+<p>등가 시정수 $\tau = \dfrac{L(R_1+R_2)}{R_1 R_2}$, 정상상태 전류 $I_\infty = \dfrac{V_0}{R_1}\cdot\dfrac{R_2}{R_1+R_2}\cdot\dfrac{R_1+R_2}{R_2}$... 정리 후:</p>
+<p>$I_\infty = \dfrac{V_0}{R_1}$</p>
+<p><span class="step-label">⑦ 적분인자 풀이 + $I(0)=0$:</span></p>
+<div class="answer-box">
+$$\boxed{\;I(t) = \dfrac{V_0}{R_1}\left(1 - e^{-t/\tau}\right), \quad \tau = \dfrac{L(R_1+R_2)}{R_1 R_2}\;}$$
+$t\to\infty$에서 코일은 단락(short)처럼 동작하여 $R_2$는 무시되고 전류는 $V_0/R_1$로 수렴. $R_2$는 시정수에만 영향.
+</div>
+</div>
+</div>
+</div>
+
+<hr>
+<p style="text-align:center; color:#888; font-size:0.9em; margin-top:40px;">
+풀이 순서 팁: <b>①회로 해석 ② KVL/KCL로 방정식 세우기 ③ 미분방정식 표준형 ④ 일반해 ⑤ 초기조건 ⑥ 최종답</b>
+</p>
+
+<script>
+function toggleAll(collapse) {
+  document.querySelectorAll('.solution').forEach(s => {
+    if (collapse) s.classList.add('collapsed');
+    else s.classList.remove('collapsed');
+  });
+}
+// 페이지 로드 시 모든 풀이 접어두기 (원하면 주석 해제)
+// window.addEventListener('load', () => toggleAll(true));
+</script>
+
+</body>
+</html>

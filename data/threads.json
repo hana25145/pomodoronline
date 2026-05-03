@@ -1,0 +1,45 @@
+[
+  {
+    "id": "thr-9b8f6fdcfc1f",
+    "groupId": "grp-fb17ca57c8bc",
+    "author": "sehyunjang09",
+    "text": "@[회로 미분방정식.png](file-e6978a0316d3)  ..",
+    "mentionedFileIds": [
+      "file-e6978a0316d3"
+    ],
+    "createdAt": 1777780232519,
+    "resolved": false,
+    "replies": []
+  },
+  {
+    "id": "thr-c459dc204c07",
+    "groupId": "grp-fb17ca57c8bc",
+    "author": "sehyunjang09",
+    "text": "@[fabric-installer-1.1.1.jar](file-218146ba5530) 는 마인크래프트 인스털러입니다",
+    "mentionedFileIds": [
+      "file-218146ba5530"
+    ],
+    "createdAt": 1777780225495,
+    "resolved": false,
+    "replies": []
+  },
+  {
+    "id": "thr-c00fa6b468fe",
+    "groupId": "grp-fb17ca57c8bc",
+    "author": "sehyunjang09",
+    "text": "@[attention.pdf](file-72b9fc502e82) is not gomul",
+    "mentionedFileIds": [
+      "file-72b9fc502e82"
+    ],
+    "createdAt": 1777696319812,
+    "resolved": false,
+    "replies": [
+      {
+        "id": "rep-2cf0e90f5f69",
+        "author": "sehyunjang09",
+        "text": "oiia",
+        "createdAt": 1777696449424
+      }
+    ]
+  }
+]

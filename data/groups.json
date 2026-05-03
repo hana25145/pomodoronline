@@ -1,5 +1,6 @@
 [
   {
+    "materials": [],
     "id": "grp-f99b7ff0913a",
     "name": "Study Gang",
     "createdBy": "alice",
@@ -9,6 +10,7 @@
     ]
   },
   {
+    "materials": [],
     "id": "grp-bea499b1ca47",
     "name": "Study Gang",
     "createdBy": "usr1",
@@ -18,6 +20,7 @@
     ]
   },
   {
+    "materials": [],
     "id": "grp-800b23e2656d",
     "name": "Study Gang",
     "createdBy": "tst1",
@@ -27,6 +30,7 @@
     ]
   },
   {
+    "materials": [],
     "id": "grp-e33818c60085",
     "name": "Study Gang",
     "createdBy": "qa1",
@@ -37,6 +41,99 @@
     ]
   },
   {
+    "materials": [
+      {
+        "folders": [
+          {
+            "id": "default-files",
+            "name": "Files",
+            "createdBy": "sehyunjang09",
+            "createdAt": 1777696292649,
+            "isDefault": true
+          },
+          {
+            "id": "fld-09df1135b084",
+            "name": "testin'",
+            "createdBy": "sehyunjang09",
+            "createdAt": 1777698192945
+          }
+        ],
+        "files": [
+          {
+            "id": "file-72b9fc502e82",
+            "name": "attention.pdf",
+            "mimeType": "application/pdf",
+            "size": 2215244,
+            "uploadedBy": "sehyunjang09",
+            "uploadedAt": 1777696296855,
+            "folderId": "default-files"
+          },
+          {
+            "id": "file-218146ba5530",
+            "name": "fabric-installer-1.1.1.jar",
+            "mimeType": "application/java-archive",
+            "size": 209151,
+            "uploadedBy": "sehyunjang09",
+            "uploadedAt": 1777697063891,
+            "folderId": "default-files"
+          }
+        ],
+        "id": "sub-e1c3dbb8a775",
+        "name": "고급물리학",
+        "createdBy": "sehyunjang09",
+        "createdAt": 1777696292649
+      },
+      {
+        "folders": [
+          {
+            "id": "default-files",
+            "name": "Files",
+            "createdBy": "sehyunjang09",
+            "createdAt": 1777697086104,
+            "isDefault": true
+          }
+        ],
+        "files": [],
+        "id": "sub-ebba09e82a6c",
+        "name": "AP Chemistry",
+        "createdBy": "sehyunjang09",
+        "createdAt": 1777697086104
+      },
+      {
+        "folders": [
+          {
+            "id": "default-files",
+            "name": "Files",
+            "createdBy": "sehyunjang09",
+            "createdAt": 1777767846665,
+            "isDefault": true
+          },
+          {
+            "id": "fld-10224b88ef0c",
+            "name": "Foldin'",
+            "createdBy": "sehyunjang09",
+            "createdAt": 1777780305680
+          }
+        ],
+        "files": [
+          {
+            "id": "file-e6978a0316d3",
+            "name": "회방.html",
+            "mimeType": "text/html",
+            "size": 18121,
+            "folderId": "default-files",
+            "uploadedBy": "sehyunjang09",
+            "uploadedAt": 1777780181486,
+            "updatedBy": "sehyunjang09",
+            "updatedAt": 1777780240381
+          }
+        ],
+        "id": "sub-26faefc3f6b1",
+        "name": "testin'",
+        "createdBy": "sehyunjang09",
+        "createdAt": 1777767846665
+      }
+    ],
     "id": "grp-fb17ca57c8bc",
     "name": "OOMPA",
     "createdBy": "sehyunjang09",
@@ -46,6 +143,7 @@
     ]
   },
   {
+    "materials": [],
     "id": "grp-5b828aa95ff8",
     "name": "test group",
     "createdBy": "sehyunjang09",

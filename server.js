@@ -13,6 +13,8 @@ const dataDir = process.env.DATA_DIR
   : path.join(__dirname, "data");
 const usersFile = path.join(dataDir, "users.json");
 const groupsFile = path.join(dataDir, "groups.json");
+const threadsFile = path.join(dataDir, "threads.json");
+const filesDir = path.join(dataDir, "files");
 const PORT = Number(process.env.PORT || 5173);
 const MAX_CHAT_MESSAGES = 80;
 const MAX_HISTORY_ITEMS = 10;
@@ -35,9 +37,11 @@ const DEFAULT_DURATIONS = {
   short: 5 * 60 * 1000,
   long: 15 * 60 * 1000
 };
+const DEFAULT_FILES_FOLDER_ID = "default-files";
 
 const users = loadUsers();
 const groups = loadGroups();
+const threadsByGroup = loadThreads();
 const authTokens = new Map();
 const rooms = new Map();
 const sockets = new Map();
@@ -70,7 +74,7 @@ function loadGroups() {
   if (!fs.existsSync(groupsFile)) return new Map();
   try {
     const raw = JSON.parse(fs.readFileSync(groupsFile, "utf8"));
-    return new Map(raw.map((g) => [g.id, g]));
+    return new Map(raw.map((g) => [g.id, { materials: [], ...g }]));
   } catch {
     return new Map();
   }
@@ -81,8 +85,99 @@ function persistGroups() {
   fs.writeFileSync(groupsFile, JSON.stringify([...groups.values()], null, 2));
 }
 
+function loadThreads() {
+  ensureDataDir();
+  if (!fs.existsSync(threadsFile)) return new Map();
+  try {
+    const raw = JSON.parse(fs.readFileSync(threadsFile, "utf8"));
+    const map = new Map();
+    for (const thread of raw) {
+      if (!map.has(thread.groupId)) map.set(thread.groupId, []);
+      map.get(thread.groupId).push(thread);
+    }
+    return map;
+  } catch {
+    return new Map();
+  }
+}
+
+function persistThreads() {
+  ensureDataDir();
+  const all = [];
+  for (const threads of threadsByGroup.values()) all.push(...threads);
+  fs.writeFileSync(threadsFile, JSON.stringify(all, null, 2));
+}
+
+function getGroupFileDir(groupId, subjectId) {
+  return path.join(filesDir, groupId, subjectId);
+}
+
+function saveGroupFile(groupId, subjectId, fileId, buffer) {
+  const dir = getGroupFileDir(groupId, subjectId);
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, fileId), buffer);
+}
+
+function deleteGroupFile(groupId, subjectId, fileId) {
+  try { fs.unlinkSync(path.join(getGroupFileDir(groupId, subjectId), fileId)); } catch {}
+}
+
 function sanitizeGroup(group) {
-  return { id: group.id, name: group.name, createdBy: group.createdBy, createdAt: group.createdAt, members: [...group.members] };
+  return {
+    id: group.id,
+    name: group.name,
+    createdBy: group.createdBy,
+    createdAt: group.createdAt,
+    members: [...group.members],
+    materials: group.materials || []
+  };
+}
+
+function normalizeMaterials(group) {
+  group.materials = (group.materials || []).map((subject) => ({
+    folders: [],
+    files: [],
+    ...subject
+  }));
+  for (const subject of group.materials) {
+    subject.folders = subject.folders || [];
+    subject.files = subject.files || [];
+    let defaultFolder = subject.folders.find((folder) => folder.id === DEFAULT_FILES_FOLDER_ID);
+    if (!defaultFolder) {
+      defaultFolder = {
+        id: DEFAULT_FILES_FOLDER_ID,
+        name: "Files",
+        createdBy: subject.createdBy || "System",
+        createdAt: subject.createdAt || Date.now(),
+        isDefault: true
+      };
+      subject.folders.unshift(defaultFolder);
+    } else {
+      defaultFolder.name = "Files";
+      defaultFolder.isDefault = true;
+    }
+    for (const file of subject.files) {
+      if (!file.folderId || !subject.folders.some((folder) => folder.id === file.folderId)) {
+        file.folderId = DEFAULT_FILES_FOLDER_ID;
+      }
+    }
+  }
+  return group.materials;
+}
+
+function getKSTDate() {
+  // Day boundary = 6 AM KST. Shift UTC by (9-6)=3 h so midnight of shifted time = 6 AM KST.
+  const shifted = new Date(Date.now() + 3 * 3_600_000);
+  return shifted.toISOString().slice(0, 10);
+}
+
+function ensureTodayData(user) {
+  const today = getKSTDate();
+  if (user.todayDate !== today) {
+    user.todayDate = today;
+    user.todayTasks = [];
+    user.todayFocusMs = 0;
+  }
 }
 
 function normalizeUsername(value) {
@@ -236,12 +331,12 @@ function extractToken(request) {
   return "";
 }
 
-function readRequestBody(request) {
+function readRequestBody(request, maxBytes = 100_000) {
   return new Promise((resolve, reject) => {
     let body = "";
     request.on("data", (chunk) => {
       body += chunk.toString("utf8");
-      if (body.length > 100_000) {
+      if (body.length > maxBytes) {
         reject(new Error("Payload too large"));
       }
     });
@@ -286,6 +381,12 @@ function transitionTimer(room) {
   const timer = room.timer;
 
   if (timer.mode === "focus") {
+    const focusMs = timer.durations.focus;
+    for (const client of room.clients) {
+      ensureTodayData(client.user);
+      client.user.todayFocusMs = (client.user.todayFocusMs || 0) + focusMs;
+    }
+    persistUsers();
     timer.focusSessionsDone += 1;
     const isLongBreak = timer.focusSessionsDone % 4 === 0;
     setTimerMode(timer, isLongBreak ? "long" : "short", "Timer");
@@ -432,7 +533,7 @@ function handleStatusMessage(client, message) {
 
 function handleSessionVoteMessage(client, message) {
   const room = client.room;
-  const vote = message.vote === "yes" ? "yes" : "no";
+  const vote = ["yes", "no", "forfeited"].includes(message.vote) ? message.vote : "no";
   room.sessionVotes.set(client.user.username, {
     username: client.user.username,
     name: client.participant.name,
@@ -1053,7 +1154,7 @@ async function handleGroupRequest(request, response, url) {
       return true;
     }
     const id = `grp-${crypto.randomBytes(6).toString("hex")}`;
-    const group = { id, name, createdBy: user.username, createdAt: Date.now(), members: [user.username] };
+    const group = { id, name, createdBy: user.username, createdAt: Date.now(), members: [user.username], materials: [] };
     groups.set(id, group);
     persistGroups();
     sendJson(response, 201, { group: sanitizeGroup(group) });
@@ -1093,10 +1194,318 @@ async function handleGroupRequest(request, response, url) {
       .map((r) => ({
         id: r.id,
         participantCount: r.participants.size,
-        participants: [...r.participants.values()].map((p) => ({ name: p.name, color: p.color }))
+        participants: [...r.participants.values()].map((p) => ({ name: p.name, color: p.color })),
+        timer: {
+          mode: r.timer.mode,
+          status: r.timer.status,
+          remainingMs: currentRemaining(r.timer),
+          cycle: r.timer.cycle
+        }
       }));
     sendJson(response, 200, { group: sanitizeGroup(group), activeRooms });
     return true;
+  }
+
+  // ── Materials ─────────────────────────────────────────────────────────────
+
+  const matListMatch = url.pathname.match(/^\/api\/groups\/([^/]+)\/materials$/);
+  if (matListMatch) {
+    const groupId = matListMatch[1];
+    const group = groups.get(groupId);
+    if (!group) { sendJson(response, 404, { error: "Group not found." }); return true; }
+    if (!group.members.includes(user.username)) { sendJson(response, 403, { error: "Not a member." }); return true; }
+    if (request.method === "GET") {
+      sendJson(response, 200, { materials: normalizeMaterials(group) });
+      return true;
+    }
+    if (request.method === "POST") {
+      const rawBody = await readRequestBody(request);
+      const body = rawBody ? JSON.parse(rawBody) : {};
+      const name = String(body.name || "").trim().slice(0, 60);
+      if (!name) { sendJson(response, 400, { error: "Subject name is required." }); return true; }
+      normalizeMaterials(group);
+      const now = Date.now();
+      const subject = {
+        id: `sub-${crypto.randomBytes(6).toString("hex")}`,
+        name,
+        createdBy: user.username,
+        createdAt: now,
+        folders: [{ id: DEFAULT_FILES_FOLDER_ID, name: "Files", createdBy: user.username, createdAt: now, isDefault: true }],
+        files: []
+      };
+      group.materials.push(subject);
+      persistGroups();
+      sendJson(response, 201, { subject });
+      return true;
+    }
+  }
+
+  const matDeleteMatch = url.pathname.match(/^\/api\/groups\/([^/]+)\/materials\/([^/]+)$/);
+  if (matDeleteMatch && (request.method === "DELETE" || request.method === "PATCH")) {
+    const [, groupId, subjectId] = matDeleteMatch;
+    const group = groups.get(groupId);
+    if (!group || !group.members.includes(user.username)) { sendJson(response, 403, { error: "Forbidden." }); return true; }
+    normalizeMaterials(group);
+    const idx = group.materials.findIndex((s) => s.id === subjectId);
+    if (idx === -1) { sendJson(response, 404, { error: "Subject not found." }); return true; }
+    if (request.method === "PATCH") {
+      const rawBody = await readRequestBody(request);
+      const body = rawBody ? JSON.parse(rawBody) : {};
+      const name = String(body.name || "").trim().slice(0, 60);
+      if (!name) { sendJson(response, 400, { error: "Subject name is required." }); return true; }
+      group.materials[idx].name = name;
+      group.materials[idx].updatedBy = user.username;
+      group.materials[idx].updatedAt = Date.now();
+      persistGroups();
+      sendJson(response, 200, { subject: group.materials[idx] });
+      return true;
+    }
+    for (const file of group.materials[idx].files || []) deleteGroupFile(groupId, subjectId, file.id);
+    group.materials.splice(idx, 1);
+    persistGroups();
+    sendJson(response, 200, { ok: true });
+    return true;
+  }
+
+  const folderListMatch = url.pathname.match(/^\/api\/groups\/([^/]+)\/materials\/([^/]+)\/folders$/);
+  if (folderListMatch && request.method === "POST") {
+    const [, groupId, subjectId] = folderListMatch;
+    const group = groups.get(groupId);
+    if (!group || !group.members.includes(user.username)) { sendJson(response, 403, { error: "Forbidden." }); return true; }
+    const subject = normalizeMaterials(group).find((s) => s.id === subjectId);
+    if (!subject) { sendJson(response, 404, { error: "Subject not found." }); return true; }
+    const rawBody = await readRequestBody(request);
+    const body = rawBody ? JSON.parse(rawBody) : {};
+    const name = String(body.name || "").trim().slice(0, 60);
+    if (!name) { sendJson(response, 400, { error: "Folder name is required." }); return true; }
+    const folder = { id: `fld-${crypto.randomBytes(6).toString("hex")}`, name, createdBy: user.username, createdAt: Date.now() };
+    subject.folders.push(folder);
+    persistGroups();
+    sendJson(response, 201, { folder });
+    return true;
+  }
+
+  const folderActionsMatch = url.pathname.match(/^\/api\/groups\/([^/]+)\/materials\/([^/]+)\/folders\/([^/]+)$/);
+  if (folderActionsMatch && (request.method === "PATCH" || request.method === "DELETE")) {
+    const [, groupId, subjectId, folderId] = folderActionsMatch;
+    const group = groups.get(groupId);
+    if (!group || !group.members.includes(user.username)) { sendJson(response, 403, { error: "Forbidden." }); return true; }
+    const subject = normalizeMaterials(group).find((s) => s.id === subjectId);
+    if (!subject) { sendJson(response, 404, { error: "Subject not found." }); return true; }
+    const folderIdx = subject.folders.findIndex((f) => f.id === folderId);
+    if (folderIdx === -1) { sendJson(response, 404, { error: "Folder not found." }); return true; }
+    if (request.method === "PATCH") {
+      const rawBody = await readRequestBody(request);
+      const body = rawBody ? JSON.parse(rawBody) : {};
+      const name = String(body.name || "").trim().slice(0, 60);
+      if (!name) { sendJson(response, 400, { error: "Folder name is required." }); return true; }
+      subject.folders[folderIdx].name = name;
+      subject.folders[folderIdx].updatedBy = user.username;
+      subject.folders[folderIdx].updatedAt = Date.now();
+      persistGroups();
+      sendJson(response, 200, { folder: subject.folders[folderIdx] });
+      return true;
+    }
+    if (folderId === DEFAULT_FILES_FOLDER_ID) {
+      sendJson(response, 400, { error: "Default folder cannot be removed." });
+      return true;
+    }
+    for (const file of subject.files || []) {
+      if (file.folderId === folderId) file.folderId = DEFAULT_FILES_FOLDER_ID;
+    }
+    subject.folders.splice(folderIdx, 1);
+    persistGroups();
+    sendJson(response, 200, { ok: true });
+    return true;
+  }
+
+  const fileDownloadMatch = url.pathname.match(/^\/api\/groups\/([^/]+)\/materials\/([^/]+)\/files\/([^/]+)\/download$/);
+  if (fileDownloadMatch && request.method === "GET") {
+    const [, groupId, subjectId, fileId] = fileDownloadMatch;
+    const group = groups.get(groupId);
+    if (!group || !group.members.includes(user.username)) { sendJson(response, 403, { error: "Forbidden." }); return true; }
+    const subject = (group.materials || []).find((s) => s.id === subjectId);
+    if (!subject) { sendJson(response, 404, { error: "Subject not found." }); return true; }
+    const fileMeta = (subject.files || []).find((f) => f.id === fileId);
+    if (!fileMeta) { sendJson(response, 404, { error: "File not found." }); return true; }
+    const filePath = path.join(getGroupFileDir(groupId, subjectId), fileId);
+    if (!fs.existsSync(filePath)) { sendJson(response, 404, { error: "File data not found." }); return true; }
+    const fileData = fs.readFileSync(filePath);
+    const safeFileName = fileMeta.name.replace(/[^\w.\- ]/g, "_");
+    response.writeHead(200, {
+      "Content-Type": fileMeta.mimeType || "application/octet-stream",
+      "Content-Disposition": `attachment; filename="${safeFileName}"`,
+      "Content-Length": fileData.length,
+      "Cache-Control": "no-store"
+    });
+    response.end(fileData);
+    return true;
+  }
+
+  const fileViewMatch = url.pathname.match(/^\/api\/groups\/([^/]+)\/materials\/([^/]+)\/files\/([^/]+)\/view$/);
+  if (fileViewMatch && request.method === "GET") {
+    const [, groupId, subjectId, fileId] = fileViewMatch;
+    const group = groups.get(groupId);
+    if (!group || !group.members.includes(user.username)) { sendJson(response, 403, { error: "Forbidden." }); return true; }
+    const subject = normalizeMaterials(group).find((s) => s.id === subjectId);
+    if (!subject) { sendJson(response, 404, { error: "Subject not found." }); return true; }
+    const fileMeta = (subject.files || []).find((f) => f.id === fileId);
+    if (!fileMeta) { sendJson(response, 404, { error: "File not found." }); return true; }
+    const filePath = path.join(getGroupFileDir(groupId, subjectId), fileId);
+    if (!fs.existsSync(filePath)) { sendJson(response, 404, { error: "File data not found." }); return true; }
+    const fileData = fs.readFileSync(filePath);
+    const safeFileName = fileMeta.name.replace(/[^\w.\- ]/g, "_");
+    response.writeHead(200, {
+      "Content-Type": fileMeta.mimeType || "application/octet-stream",
+      "Content-Disposition": `inline; filename="${safeFileName}"`,
+      "Content-Length": fileData.length,
+      "Cache-Control": "no-store"
+    });
+    response.end(fileData);
+    return true;
+  }
+
+  const fileActionsMatch = url.pathname.match(/^\/api\/groups\/([^/]+)\/materials\/([^/]+)\/files\/([^/]+)$/);
+  if (fileActionsMatch && (request.method === "DELETE" || request.method === "PATCH")) {
+    const [, groupId, subjectId, fileId] = fileActionsMatch;
+    const group = groups.get(groupId);
+    if (!group || !group.members.includes(user.username)) { sendJson(response, 403, { error: "Forbidden." }); return true; }
+    const subject = normalizeMaterials(group).find((s) => s.id === subjectId);
+    if (!subject) { sendJson(response, 404, { error: "Subject not found." }); return true; }
+    const fileIdx = (subject.files || []).findIndex((f) => f.id === fileId);
+    if (fileIdx === -1) { sendJson(response, 404, { error: "File not found." }); return true; }
+    if (request.method === "PATCH") {
+      const rawBody = await readRequestBody(request);
+      const body = rawBody ? JSON.parse(rawBody) : {};
+      const name = body.name == null ? subject.files[fileIdx].name : String(body.name || "").trim().slice(0, 120);
+      if (!name) { sendJson(response, 400, { error: "File name is required." }); return true; }
+      const hasFolderId = Object.prototype.hasOwnProperty.call(body, "folderId");
+      const folderId = hasFolderId
+        ? (body.folderId ? String(body.folderId) : DEFAULT_FILES_FOLDER_ID)
+        : (subject.files[fileIdx].folderId || DEFAULT_FILES_FOLDER_ID);
+      if (folderId && !subject.folders.some((f) => f.id === folderId)) {
+        sendJson(response, 400, { error: "Folder not found." });
+        return true;
+      }
+      subject.files[fileIdx].name = name;
+      subject.files[fileIdx].folderId = folderId;
+      subject.files[fileIdx].updatedBy = user.username;
+      subject.files[fileIdx].updatedAt = Date.now();
+      persistGroups();
+      sendJson(response, 200, { file: subject.files[fileIdx] });
+      return true;
+    }
+    deleteGroupFile(groupId, subjectId, fileId);
+    subject.files.splice(fileIdx, 1);
+    persistGroups();
+    sendJson(response, 200, { ok: true });
+    return true;
+  }
+
+  const fileUploadMatch = url.pathname.match(/^\/api\/groups\/([^/]+)\/materials\/([^/]+)\/files$/);
+  if (fileUploadMatch && request.method === "POST") {
+    const [, groupId, subjectId] = fileUploadMatch;
+    const group = groups.get(groupId);
+    if (!group || !group.members.includes(user.username)) { sendJson(response, 403, { error: "Forbidden." }); return true; }
+    const subject = normalizeMaterials(group).find((s) => s.id === subjectId);
+    if (!subject) { sendJson(response, 404, { error: "Subject not found." }); return true; }
+    const rawBody = await readRequestBody(request, 8_000_000);
+    const body = rawBody ? JSON.parse(rawBody) : {};
+    const fileName = String(body.name || "").trim().slice(0, 120);
+    const mimeType = String(body.mimeType || "application/octet-stream").trim().slice(0, 80);
+    const folderId = body.folderId ? String(body.folderId) : DEFAULT_FILES_FOLDER_ID;
+    const base64Data = String(body.data || "");
+    if (!fileName || !base64Data) { sendJson(response, 400, { error: "File name and data are required." }); return true; }
+    if (folderId && !subject.folders.some((f) => f.id === folderId)) {
+      sendJson(response, 400, { error: "Folder not found." });
+      return true;
+    }
+    const fileBuffer = Buffer.from(base64Data, "base64");
+    if (fileBuffer.length > 5_242_880) { sendJson(response, 400, { error: "File too large (max 5 MB)." }); return true; }
+    const fileId = `file-${crypto.randomBytes(6).toString("hex")}`;
+    saveGroupFile(groupId, subjectId, fileId, fileBuffer);
+    const fileMeta = { id: fileId, name: fileName, mimeType, size: fileBuffer.length, folderId, uploadedBy: user.username, uploadedAt: Date.now() };
+    subject.files = subject.files || [];
+    subject.files.push(fileMeta);
+    persistGroups();
+    sendJson(response, 201, { file: fileMeta });
+    return true;
+  }
+
+  // ── Threads ───────────────────────────────────────────────────────────────
+
+  const thrListMatch = url.pathname.match(/^\/api\/groups\/([^/]+)\/threads$/);
+  if (thrListMatch) {
+    const groupId = thrListMatch[1];
+    const group = groups.get(groupId);
+    if (!group || !group.members.includes(user.username)) { sendJson(response, 403, { error: "Forbidden." }); return true; }
+    if (request.method === "GET") {
+      sendJson(response, 200, { threads: threadsByGroup.get(groupId) || [] });
+      return true;
+    }
+    if (request.method === "POST") {
+      const rawBody = await readRequestBody(request);
+      const body = rawBody ? JSON.parse(rawBody) : {};
+      const text = String(body.text || "").trim().slice(0, 1000);
+      if (!text) { sendJson(response, 400, { error: "Message text is required." }); return true; }
+      const thread = {
+        id: `thr-${crypto.randomBytes(6).toString("hex")}`,
+        groupId,
+        author: user.username,
+        text,
+        mentionedFileIds: Array.isArray(body.mentionedFileIds) ? body.mentionedFileIds.slice(0, 20).map(String) : [],
+        createdAt: Date.now(),
+        resolved: false,
+        replies: []
+      };
+      if (!threadsByGroup.has(groupId)) threadsByGroup.set(groupId, []);
+      threadsByGroup.get(groupId).unshift(thread);
+      persistThreads();
+      sendJson(response, 201, { thread });
+      return true;
+    }
+  }
+
+  const thrReplyMatch = url.pathname.match(/^\/api\/groups\/([^/]+)\/threads\/([^/]+)\/replies$/);
+  if (thrReplyMatch && request.method === "POST") {
+    const [, groupId, threadId] = thrReplyMatch;
+    const group = groups.get(groupId);
+    if (!group || !group.members.includes(user.username)) { sendJson(response, 403, { error: "Forbidden." }); return true; }
+    const thread = (threadsByGroup.get(groupId) || []).find((t) => t.id === threadId);
+    if (!thread) { sendJson(response, 404, { error: "Thread not found." }); return true; }
+    const rawBody = await readRequestBody(request);
+    const body = rawBody ? JSON.parse(rawBody) : {};
+    const text = String(body.text || "").trim().slice(0, 1000);
+    if (!text) { sendJson(response, 400, { error: "Reply text is required." }); return true; }
+    const reply = { id: `rep-${crypto.randomBytes(6).toString("hex")}`, author: user.username, text, createdAt: Date.now() };
+    thread.replies.push(reply);
+    persistThreads();
+    sendJson(response, 201, { reply });
+    return true;
+  }
+
+  const thrActionsMatch = url.pathname.match(/^\/api\/groups\/([^/]+)\/threads\/([^/]+)$/);
+  if (thrActionsMatch) {
+    const [, groupId, threadId] = thrActionsMatch;
+    const group = groups.get(groupId);
+    if (!group || !group.members.includes(user.username)) { sendJson(response, 403, { error: "Forbidden." }); return true; }
+    const threads = threadsByGroup.get(groupId) || [];
+    const thread = threads.find((t) => t.id === threadId);
+    if (request.method === "PATCH") {
+      if (!thread) { sendJson(response, 404, { error: "Thread not found." }); return true; }
+      thread.resolved = !thread.resolved;
+      persistThreads();
+      sendJson(response, 200, { thread });
+      return true;
+    }
+    if (request.method === "DELETE") {
+      const idx = threads.findIndex((t) => t.id === threadId);
+      if (idx === -1) { sendJson(response, 404, { error: "Thread not found." }); return true; }
+      threads.splice(idx, 1);
+      persistThreads();
+      sendJson(response, 200, { ok: true });
+      return true;
+    }
   }
 
   return false;
@@ -1149,6 +1558,38 @@ async function handleHttpRequest(request, response) {
     }
 
     if (await handleYoutubeSearchRequest(request, response, url)) {
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/tasks") {
+      const user = getUserFromToken(extractToken(request));
+      if (!user) { sendJson(response, 401, { error: "Unauthorized" }); return; }
+      const rawBody = await readRequestBody(request);
+      const body = rawBody ? JSON.parse(rawBody) : {};
+      const text = String(body.text || "").trim().slice(0, 120);
+      if (!text) { sendJson(response, 400, { error: "Task text required." }); return; }
+      const taskStatus = ["yes", "no", "forfeited"].includes(body.status) ? body.status : "no";
+      const focusMs = Math.max(0, Number(body.focusMs) || 0);
+      ensureTodayData(user);
+      user.todayTasks.push({ id: crypto.randomUUID(), text, status: taskStatus, focusMs, at: Date.now() });
+      persistUsers();
+      sendJson(response, 201, { ok: true });
+      return;
+    }
+
+    const todayMatch = url.pathname.match(/^\/api\/users\/([^/]+)\/today$/);
+    if (todayMatch && request.method === "GET") {
+      const requester = getUserFromToken(extractToken(request));
+      if (!requester) { sendJson(response, 401, { error: "Unauthorized" }); return; }
+      const target = users.get(todayMatch[1]);
+      if (!target) { sendJson(response, 404, { error: "User not found." }); return; }
+      ensureTodayData(target);
+      sendJson(response, 200, {
+        username: target.username,
+        todayDate: target.todayDate,
+        todayTasks: target.todayTasks || [],
+        todayFocusMs: target.todayFocusMs || 0
+      });
       return;
     }
 

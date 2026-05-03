@@ -61,18 +61,76 @@
         </div>
         <button id="groupInviteButton" class="settings-button" type="button">Copy invite</button>
       </header>
-      <div class="group-body">
-        <section class="group-section">
-          <div class="group-section-head">
-            <h2>Active rooms</h2>
-            <button id="groupCreateRoomButton" class="create-room-button group-create-room-btn" type="button">+ Create room</button>
-          </div>
-          <ul class="group-rooms-list" id="groupRoomsList"></ul>
-        </section>
-        <section class="group-section">
+
+      <div class="group-body" id="groupBodyRooms">
+        <div class="group-main-col">
+          <section class="group-section group-rooms-section">
+            <div class="group-section-head">
+              <h2>Pomodoro Rooms</h2>
+              <button id="groupCreateRoomButton" class="create-room-button group-create-room-btn" type="button">+ Create room</button>
+            </div>
+            <ul class="group-rooms-list" id="groupRoomsList"></ul>
+          </section>
+
+          <section class="group-section group-material-section" aria-label="Shared Material">
+            <div class="group-section-head">
+              <h2>Shared Material</h2>
+              <button id="addSubjectButton" class="groups-new-btn" type="button">+ Add</button>
+            </div>
+
+            <form id="newSubjectForm" class="new-subject-form" hidden>
+              <input id="newSubjectInput" placeholder="Subject name" maxlength="60" autocomplete="off" />
+              <button class="entry-button" type="submit">Add</button>
+            </form>
+            <p class="dialog-message" id="newSubjectMessage"></p>
+            <ul class="subject-tile-grid" id="subjectTilesList"></ul>
+          </section>
+        </div>
+
+        <aside class="group-section group-members-sidebar">
           <h2>Members</h2>
           <ul class="group-members-list" id="groupMembersList"></ul>
-        </section>
+        </aside>
+      </div>
+
+      <div class="subject-detail-view" id="subjectDetailView" hidden>
+        <header class="subject-detail-head">
+          <button id="subjectDetailBackButton" class="home-button" type="button" aria-label="Back to group">←</button>
+          <div>
+            <p class="section-kicker">Shared Material</p>
+            <h1 id="subjectDetailTitle"></h1>
+            <p id="subjectDetailMeta" class="subject-detail-meta"></p>
+          </div>
+        </header>
+
+        <div class="group-body-material" id="groupBodyMaterial">
+          <div class="material-subjects-pane">
+            <div class="material-subjects-head">
+              <h2>Files</h2>
+              <div class="subject-detail-actions">
+                <button id="subjectRenameButton" class="groups-new-btn" type="button">Rename</button>
+                <button id="subjectFolderButton" class="groups-new-btn" type="button">+ Folder</button>
+                <button id="subjectUploadButton" class="groups-new-btn" type="button">Upload</button>
+              </div>
+            </div>
+            <ul class="subjects-list" id="subjectsList"></ul>
+            <input id="fileUploadInput" type="file" hidden />
+          </div>
+
+          <div class="material-threads-pane">
+            <div class="material-threads-head">
+              <h2>Discussion</h2>
+            </div>
+            <ul class="threads-list" id="threadsList"></ul>
+            <div class="new-thread-form-wrapper">
+              <div id="mentionDropdown" class="mention-dropdown" hidden></div>
+              <form id="newThreadForm" class="new-thread-form">
+                <input id="threadInput" class="new-thread-input" placeholder="Ask a question… type @ to mention a file" maxlength="1000" autocomplete="off" />
+                <button class="icon-button" type="submit">Post</button>
+              </form>
+            </div>
+          </div>
+        </div>
       </div>
     </main>
 
@@ -95,6 +153,7 @@
         <div class="complete-actions">
           <button id="sessionCompleteYes" class="complete-btn complete-yes" type="button">✓  Yes</button>
           <button id="sessionCompleteNo" class="complete-btn complete-no" type="button">✗  No</button>
+          <button id="sessionCompleteForfeit" class="complete-btn complete-forfeit" type="button">⊘  Forfeit</button>
         </div>
       </div>
     </dialog>
@@ -233,6 +292,7 @@
               <button id="startPauseButton" class="action-button start" type="button">Start</button>
               <button id="resetButton" class="action-button ghost" type="button">Reset</button>
             </div>
+            <button id="finishEarlyButton" class="action-button finish-early" type="button" hidden>Finish early</button>
           </div>
         </section>
 
@@ -328,6 +388,49 @@
           </form>
 
         </div>
+      </div>
+    </dialog>
+
+    <dialog class="finish-early-dialog" id="finishEarlyDialog" aria-labelledby="finishEarlyTitle">
+      <div class="finish-early-shell">
+        <p class="section-kicker">Task complete</p>
+        <h1 id="finishEarlyTitle">Good work!</h1>
+        <p class="finish-early-desc">What's next?</p>
+        <form id="finishEarlyForm">
+          <input id="finishEarlyInput" maxlength="60" autocomplete="off" placeholder="Enter your next task…" />
+          <div class="finish-early-actions">
+            <button class="create-room-submit" type="submit">Continue with new task</button>
+            <button id="finishEarlyStop" class="action-button ghost" type="button">Stop working</button>
+          </div>
+        </form>
+      </div>
+    </dialog>
+
+    <dialog class="insight-dialog" id="insightDialog" aria-labelledby="insightTitle">
+      <div class="insight-shell">
+        <div class="insight-head">
+          <div>
+            <p class="section-kicker">Insights</p>
+            <h1 id="insightTitle">User</h1>
+          </div>
+          <button id="closeInsightButton" class="close-button" type="button" aria-label="Close insights">Close</button>
+        </div>
+        <p class="insight-focus-time" id="insightFocusTime"></p>
+        <p class="insight-reset-note">Resets daily at 6 AM KST</p>
+        <ul class="insight-task-list" id="insightTaskList" role="list"></ul>
+      </div>
+    </dialog>
+
+    <dialog class="pdf-preview-dialog" id="pdfPreviewDialog" aria-labelledby="pdfPreviewTitle">
+      <div class="pdf-preview-shell">
+        <div class="pdf-preview-head">
+          <h1 id="pdfPreviewTitle">PDF Preview</h1>
+          <div class="pdf-preview-actions">
+            <button id="pdfDownloadButton" class="icon-button" type="button">Download</button>
+            <button id="closePdfPreviewButton" class="close-button" type="button" aria-label="Close PDF preview">Close</button>
+          </div>
+        </div>
+        <iframe id="pdfPreviewFrame" class="pdf-preview-frame" title="PDF preview"></iframe>
       </div>
     </dialog>
 

@@ -12,6 +12,7 @@ const DEFAULT_DURATIONS = {
   short: 5 * 60 * 1000,
   long: 15 * 60 * 1000
 };
+const DEFAULT_FILES_FOLDER_ID = "default-files";
 
 const STATUS_UPDATE_COOLDOWN_MS = 10 * 60 * 1000;
 
@@ -352,7 +353,19 @@ const state = {
   pendingGroupFromUrl: "",
   createRoomGroupId: null,
   sessionVotes: [],
-  sessionVoteSubmitted: false
+  sessionVoteSubmitted: false,
+  activeTask: null,
+  groupTab: "rooms",
+  groupMaterials: [],
+  groupThreads: [],
+  currentSubjectId: null,
+  pendingUploadSubjectId: null,
+  pendingUploadFolderId: null,
+  pdfPreviewObjectUrl: "",
+  pdfPreviewDownload: null,
+  mentionQuery: "",
+  mentionHighlight: 0,
+  openReplyThreadId: null
 };
 
 const elements = {
@@ -464,7 +477,46 @@ const elements = {
   sessionCompleteGoal: document.querySelector("#sessionCompleteGoal"),
   sessionCompleteYes: document.querySelector("#sessionCompleteYes"),
   sessionCompleteNo: document.querySelector("#sessionCompleteNo"),
-  sessionVoteList: document.querySelector("#sessionVoteList")
+  sessionCompleteForfeit: document.querySelector("#sessionCompleteForfeit"),
+  sessionVoteList: document.querySelector("#sessionVoteList"),
+  finishEarlyButton: document.querySelector("#finishEarlyButton"),
+  finishEarlyDialog: document.querySelector("#finishEarlyDialog"),
+  finishEarlyForm: document.querySelector("#finishEarlyForm"),
+  finishEarlyInput: document.querySelector("#finishEarlyInput"),
+  finishEarlyStop: document.querySelector("#finishEarlyStop"),
+  insightDialog: document.querySelector("#insightDialog"),
+  insightTitle: document.querySelector("#insightTitle"),
+  insightFocusTime: document.querySelector("#insightFocusTime"),
+  insightTaskList: document.querySelector("#insightTaskList"),
+  closeInsightButton: document.querySelector("#closeInsightButton"),
+  pdfPreviewDialog: document.querySelector("#pdfPreviewDialog"),
+  pdfPreviewTitle: document.querySelector("#pdfPreviewTitle"),
+  pdfPreviewFrame: document.querySelector("#pdfPreviewFrame"),
+  pdfDownloadButton: document.querySelector("#pdfDownloadButton"),
+  closePdfPreviewButton: document.querySelector("#closePdfPreviewButton"),
+  groupTabRooms: document.querySelector("#groupTabRooms"),
+  groupTabMaterial: document.querySelector("#groupTabMaterial"),
+  groupBodyRooms: document.querySelector("#groupBodyRooms"),
+  groupBodyMaterial: document.querySelector("#groupBodyMaterial"),
+  subjectDetailView: document.querySelector("#subjectDetailView"),
+  subjectDetailBackButton: document.querySelector("#subjectDetailBackButton"),
+  subjectDetailTitle: document.querySelector("#subjectDetailTitle"),
+  subjectDetailMeta: document.querySelector("#subjectDetailMeta"),
+  subjectRenameButton: document.querySelector("#subjectRenameButton"),
+  subjectFolderButton: document.querySelector("#subjectFolderButton"),
+  subjectUploadButton: document.querySelector("#subjectUploadButton"),
+  addSubjectButton: document.querySelector("#addSubjectButton"),
+  newSubjectForm: document.querySelector("#newSubjectForm"),
+  newSubjectInput: document.querySelector("#newSubjectInput"),
+  newSubjectMessage: document.querySelector("#newSubjectMessage"),
+  subjectTilesList: document.querySelector("#subjectTilesList"),
+  subjectCategoryButtons: document.querySelector("#subjectCategoryButtons"),
+  subjectsList: document.querySelector("#subjectsList"),
+  fileUploadInput: document.querySelector("#fileUploadInput"),
+  threadsList: document.querySelector("#threadsList"),
+  newThreadForm: document.querySelector("#newThreadForm"),
+  threadInput: document.querySelector("#threadInput"),
+  mentionDropdown: document.querySelector("#mentionDropdown")
 };
 
 const context = elements.canvas.getContext("2d");
@@ -683,9 +735,12 @@ function showGroupApp() {
   disconnect();
   clearMusicPlayer();
   state.session = "entry";
+  state.currentSubjectId = null;
   elements.entryScreen.hidden = true;
   elements.timerApp.hidden = true;
   elements.groupApp.hidden = false;
+  elements.groupBodyRooms.hidden = false;
+  elements.subjectDetailView.hidden = true;
 }
 
 async function fetchGroups() {
@@ -741,6 +796,8 @@ async function openGroupPage(groupId) {
 function renderGroupPage(data) {
   const { group, activeRooms } = data;
   elements.groupTitle.textContent = group.name;
+  fetchGroupMaterials();
+  fetchGroupThreads();
 
   elements.groupMembersList.innerHTML = "";
   for (const username of group.members) {
@@ -767,21 +824,53 @@ function renderGroupPage(data) {
   for (const room of activeRooms) {
     const li = document.createElement("li");
     li.className = "group-room-item";
+    li.addEventListener("click", () => startMulti(room.id));
     const info = document.createElement("div");
     info.className = "group-room-info";
     const nameEl = document.createElement("span");
     nameEl.className = "group-room-name";
     nameEl.textContent = room.id;
+    const meta = document.createElement("div");
+    meta.className = "group-room-meta";
+    const timer = room.timer || {};
+    const statusText = timer.status === "running"
+      ? `${MODE_COPY[timer.mode]?.text || "Focus"} · ${formatRoomRemaining(timer.remainingMs || 0)} left`
+      : timer.status === "paused"
+        ? `${MODE_COPY[timer.mode]?.text || "Focus"} paused`
+        : "Waiting to start";
+    const status = document.createElement("span");
+    status.className = "group-room-status";
+    const dot = document.createElement("span");
+    dot.className = `group-room-status-dot ${timer.status === "running" ? timer.mode : "idle"}`;
+    status.append(dot, document.createTextNode(statusText));
+    meta.append(status);
+    if (timer.cycle) {
+      const badge = document.createElement("span");
+      badge.className = "group-room-timer-badge";
+      badge.textContent = timer.mode === "focus" ? `Round ${timer.cycle}` : MODE_COPY[timer.mode]?.label || "Break";
+      meta.append(badge);
+    }
+    info.append(nameEl, meta);
+
+    const right = document.createElement("div");
+    right.className = "group-room-right";
+    const avatars = document.createElement("div");
+    avatars.className = "group-room-avatars";
+    for (const participant of (room.participants || []).slice(0, 4)) {
+      const avatar = document.createElement("span");
+      avatar.className = "group-room-avatar";
+      avatar.style.setProperty("--avatar", LEGACY_COLORS[participant.color] || participant.color || DEFAULT_COLOR);
+      avatar.textContent = (participant.name || "?").slice(0, 1).toUpperCase();
+      avatars.append(avatar);
+    }
     const countEl = document.createElement("span");
     countEl.className = "group-room-count";
-    countEl.textContent = `${room.participantCount} online`;
-    info.append(nameEl, countEl);
-    const joinBtn = document.createElement("button");
-    joinBtn.type = "button";
-    joinBtn.className = "entry-button group-room-join-btn";
-    joinBtn.textContent = "Join";
-    joinBtn.addEventListener("click", () => startMulti(room.id));
-    li.append(info, joinBtn);
+    countEl.textContent = `${room.participantCount} member${room.participantCount !== 1 ? "s" : ""}`;
+    const arrow = document.createElement("span");
+    arrow.className = "group-room-join-arrow";
+    arrow.textContent = "→";
+    right.append(avatars, countEl, arrow);
+    li.append(info, right);
     elements.groupRoomsList.append(li);
   }
 }
@@ -803,8 +892,66 @@ function closeAllDialogs(restoreFocus = false) {
   closeDialog(elements.settingsDialog);
   closeDialog(elements.sessionGoalDialog);
   closeDialog(elements.sessionCompleteDialog);
+  closeDialog(elements.finishEarlyDialog);
+  closeDialog(elements.insightDialog);
+  closePdfPreview();
   if (restoreFocus && !elements.timerApp.hidden) {
     elements.homeButton.focus();
+  }
+}
+
+async function resolveTask(status, focusMs) {
+  const task = state.activeTask;
+  state.activeTask = null;
+  if (!task || state.session !== "multi") return;
+  try {
+    await apiRequest("/api/tasks", {
+      method: "POST",
+      body: JSON.stringify({ text: task.text, status, focusMs: focusMs ?? task.sessionDurationMs })
+    });
+  } catch {
+    // Best-effort — don't interrupt UX on failure
+  }
+}
+
+async function openInsightPage(username) {
+  try {
+    const data = await apiRequest(`/api/users/${encodeURIComponent(username)}/today`, { method: "GET", headers: {} });
+    renderInsightPage(data);
+    openDialog(elements.insightDialog);
+  } catch (error) {
+    setNotice(error instanceof Error ? error.message : "Could not load insights.");
+  }
+}
+
+function renderInsightPage(data) {
+  elements.insightTitle.textContent = data.username;
+  elements.insightFocusTime.textContent = `Focus today: ${formatFocusMs(data.todayFocusMs || 0)}`;
+  elements.insightTaskList.innerHTML = "";
+  const tasks = data.todayTasks || [];
+  if (tasks.length === 0) {
+    const li = document.createElement("li");
+    li.className = "insight-task-empty";
+    li.textContent = "No tasks yet today.";
+    elements.insightTaskList.append(li);
+    return;
+  }
+  for (const task of tasks) {
+    const li = document.createElement("li");
+    li.className = "insight-task-item";
+    const iconMap = { yes: "✓", no: "✗", forfeited: "⊘" };
+    const classMap = { yes: "is-done", no: "is-fail", forfeited: "is-forfeit" };
+    const icon = iconMap[task.status] || "✗";
+    const iconClass = classMap[task.status] || "is-fail";
+    li.innerHTML = `
+      <span class="insight-task-icon ${iconClass}"></span>
+      <span class="insight-task-text"></span>
+      <span class="insight-task-time"></span>
+    `;
+    li.querySelector(".insight-task-icon").textContent = icon;
+    li.querySelector(".insight-task-text").textContent = task.text;
+    li.querySelector(".insight-task-time").textContent = formatFocusMs(task.focusMs || 0);
+    elements.insightTaskList.append(li);
   }
 }
 
@@ -854,6 +1001,22 @@ function addLocalHistory(by, text) {
 
 function msToMinutes(milliseconds) {
   return Math.round(milliseconds / 60_000);
+}
+
+function formatFocusMs(ms) {
+  const totalMin = Math.round(ms / 60_000);
+  const h = Math.floor(totalMin / 60);
+  const min = totalMin % 60;
+  if (h === 0) return `${min}m`;
+  if (min === 0) return `${h}h`;
+  return `${h}h ${min}m`;
+}
+
+function formatRoomRemaining(ms) {
+  const totalSeconds = Math.max(0, Math.ceil(ms / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
 }
 
 function formatTime(milliseconds) {
@@ -1163,6 +1326,8 @@ let musicKeepAliveScheduledAt = 0;
 let lastMusicKeepAliveAt = 0;
 /* True once YouTube reports its player has started playing (onStateChange=1). */
 let youtubePlayerPlaying = false;
+/* True once YouTube reports the current iframe reached the end. */
+let youtubePlayerEnded = false;
 
 function getMusicIframe() {
   return elements.youtubePlayerHost.querySelector("iframe");
@@ -1182,7 +1347,7 @@ function postMusicCommand(func, args = []) {
 }
 
 function scheduleMusicKeepAlive({ unmute = false, attempts = 4, initialDelay = 160 } = {}) {
-  if (state.session !== "multi" || !state.music.current) {
+  if (state.session !== "multi" || !state.music.current || youtubePlayerEnded) {
     return;
   }
   lastMusicKeepAliveAt = performance.now();
@@ -1192,7 +1357,7 @@ function scheduleMusicKeepAlive({ unmute = false, attempts = 4, initialDelay = 1
       if (keepAliveStamp !== musicKeepAliveScheduledAt) {
         return;
       }
-      if (state.session !== "multi" || !state.music.current) {
+      if (state.session !== "multi" || !state.music.current || youtubePlayerEnded) {
         return;
       }
       postMusicCommand("playVideo");
@@ -1235,6 +1400,9 @@ function unlockAudioPlayback() {
     syncMusicPlayer(true);
     return; // unmute will happen via onStateChange once player starts
   }
+  if (youtubePlayerEnded) {
+    return;
+  }
   if (!state.musicMuted) {
     if (youtubePlayerPlaying) {
       postMusicCommand("unMute");
@@ -1247,6 +1415,7 @@ function unlockAudioPlayback() {
 function clearMusicPlayer() {
   state.playerKey = "";
   youtubePlayerPlaying = false;
+  youtubePlayerEnded = false;
   musicKeepAliveScheduledAt += 1;
   elements.youtubePlayerHost.innerHTML = "";
   if (musicProgressRafId) { cancelAnimationFrame(musicProgressRafId); musicProgressRafId = null; }
@@ -1265,6 +1434,7 @@ function syncMusicPlayer(force = false) {
   }
 
   youtubePlayerPlaying = false;
+  youtubePlayerEnded = false;
   const resumeAtSeconds = Math.max(0, Math.floor((Date.now() + state.serverOffset - current.startedAt) / 1000));
   const iframe = document.createElement("iframe");
   iframe.width = "200";
@@ -1353,6 +1523,12 @@ function updateControls() {
   elements.musicSearchSubmitButton.disabled = !canUseRoomPanels;
   elements.chatInput.placeholder = isMulti ? "Type a message" : "Join a room to chat";
   elements.musicSearchInput.placeholder = isMulti ? "Search YouTube music" : "Join a room to add music";
+
+  elements.finishEarlyButton.hidden = !(
+    state.timer.mode === "focus" &&
+    state.timer.status === "running" &&
+    Boolean(state.activeTask)
+  );
 
   elements.settingsKicker.textContent = state.session === "solo" ? "Solo" : state.isHost ? "Host" : "Viewer";
   renderViewerBadge();
@@ -1930,6 +2106,7 @@ function goHome() {
   elements.roomCodeButton.hidden = true;
   state.room = "";
   state.pendingRoomSetup = null;
+  state.currentSubjectId = null;
   state.isHost = false;
   state.serverOffset = 0;
   state.timer = createTimerState();
@@ -2180,6 +2357,8 @@ function renderSessionVotes() {
   for (const p of state.participants) {
     const li = document.createElement("li");
     li.className = "session-vote-item";
+    li.title = `View ${p.name}'s insights`;
+    li.addEventListener("click", () => openInsightPage(p.username));
 
     const dot = document.createElement("span");
     dot.className = "session-vote-dot";
@@ -2192,8 +2371,10 @@ function renderSessionVotes() {
     const badge = document.createElement("span");
     const vote = voteMap.get(p.username);
     if (vote) {
-      badge.className = `session-vote-badge ${vote.vote === "yes" ? "is-yes" : "is-no"}`;
-      badge.textContent = vote.vote === "yes" ? "✓ Done" : "✗ Not yet";
+      const voteClass = vote.vote === "yes" ? "is-yes" : vote.vote === "forfeited" ? "is-forfeit" : "is-no";
+      const voteText = vote.vote === "yes" ? "✓ Done" : vote.vote === "forfeited" ? "⊘ Forfeit" : "✗ Not yet";
+      badge.className = `session-vote-badge ${voteClass}`;
+      badge.textContent = voteText;
     } else {
       badge.className = "session-vote-badge is-pending";
       badge.textContent = "…";
@@ -2214,12 +2395,17 @@ function bindDialogBackdrop(dialog, closeFn) {
 
 function bindEvents() {
   setAuthMode("login");
+  bindMaterialEvents();
   elements.loginTabButton.addEventListener("click", () => setAuthMode("login"));
   elements.signupTabButton.addEventListener("click", () => setAuthMode("signup"));
   elements.authForm.addEventListener("submit", handleAuthSubmit);
   elements.entryLogoutButton.addEventListener("click", logout);
 
   elements.groupBackButton.addEventListener("click", () => {
+    if (state.currentSubjectId) {
+      closeSubjectDetail();
+      return;
+    }
     state.currentGroup = null;
     showModePanel();
   });
@@ -2336,6 +2522,7 @@ function bindEvents() {
       return;
     }
     localStorage.setItem(STORAGE_KEYS.focusTask, goal);
+    state.activeTask = { text: goal, startedAt: Date.now(), sessionDurationMs: state.timer.durations.focus };
     if (state.session === "multi") {
       send({ type: "status", text: goal });
       state.statusText = goal;
@@ -2347,14 +2534,61 @@ function bindEvents() {
 
   bindDialogBackdrop(elements.sessionGoalDialog, () => closeDialog(elements.sessionGoalDialog));
 
-  function submitSessionVote(vote) {
+  async function submitSessionVote(vote) {
     if (state.sessionVoteSubmitted) return;
     state.sessionVoteSubmitted = true;
     send({ type: "session-vote", vote });
+    const focusMs = state.activeTask ? state.activeTask.sessionDurationMs : (state.timer.durations.focus);
+    await resolveTask(vote, focusMs);
     closeDialog(elements.sessionCompleteDialog);
   }
   elements.sessionCompleteYes.addEventListener("click", () => submitSessionVote("yes"));
   elements.sessionCompleteNo.addEventListener("click", () => submitSessionVote("no"));
+  elements.sessionCompleteForfeit.addEventListener("click", () => submitSessionVote("forfeited"));
+
+  elements.finishEarlyButton.addEventListener("click", () => {
+    if (!state.activeTask) return;
+    elements.finishEarlyInput.value = "";
+    openDialog(elements.finishEarlyDialog);
+    requestAnimationFrame(() => elements.finishEarlyInput.focus());
+  });
+
+  elements.finishEarlyForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const newTask = normalizeStatusText(elements.finishEarlyInput.value);
+    if (!newTask) { elements.finishEarlyInput.focus(); return; }
+    const elapsed = state.activeTask ? Math.min(Date.now() - state.activeTask.startedAt, state.activeTask.sessionDurationMs) : 0;
+    await resolveTask("yes", elapsed);
+    closeDialog(elements.finishEarlyDialog);
+    state.activeTask = { text: newTask, startedAt: Date.now(), sessionDurationMs: state.timer.durations.focus };
+    localStorage.setItem(STORAGE_KEYS.focusTask, newTask);
+    if (state.session === "multi") {
+      send({ type: "status", text: newTask });
+      state.statusText = newTask;
+      renderStatusComposer();
+    }
+    updateControls();
+  });
+
+  elements.finishEarlyStop.addEventListener("click", async () => {
+    const elapsed = state.activeTask ? Math.min(Date.now() - state.activeTask.startedAt, state.activeTask.sessionDurationMs) : 0;
+    await resolveTask("yes", elapsed);
+    closeDialog(elements.finishEarlyDialog);
+    updateControls();
+  });
+
+  bindDialogBackdrop(elements.finishEarlyDialog, () => closeDialog(elements.finishEarlyDialog));
+
+  elements.closeInsightButton.addEventListener("click", () => closeDialog(elements.insightDialog));
+  bindDialogBackdrop(elements.insightDialog, () => closeDialog(elements.insightDialog));
+  elements.closePdfPreviewButton.addEventListener("click", closePdfPreview);
+  elements.pdfDownloadButton.addEventListener("click", () => {
+    if (state.pdfPreviewDownload) {
+      downloadFile(state.pdfPreviewDownload.subjectId, state.pdfPreviewDownload.fileId);
+    }
+  });
+  bindDialogBackdrop(elements.pdfPreviewDialog, closePdfPreview);
+
   elements.resetButton.addEventListener("click", () => sendTimerCommand("reset"));
   elements.modeButtons.forEach((button) => {
     button.addEventListener("click", () => sendTimerCommand("mode", { mode: button.dataset.mode }));
@@ -2465,10 +2699,15 @@ function bindEvents() {
     if (data.event !== "onStateChange") return;
     if (data.info === 1) { // YT.PlayerState.PLAYING
       youtubePlayerPlaying = true;
+      youtubePlayerEnded = false;
       if (audioInitializedInTab && !state.musicMuted) {
         postMusicCommand("unMute");
       }
-    } else if (data.info === 0 || data.info === 2) { // ended or paused
+    } else if (data.info === 0) { // ended
+      youtubePlayerPlaying = false;
+      youtubePlayerEnded = true;
+      musicKeepAliveScheduledAt += 1;
+    } else if (data.info === 2) { // paused
       youtubePlayerPlaying = false;
     }
   });
@@ -2477,9 +2716,11 @@ function bindEvents() {
     if (document.visibilityState === "visible" && state.music.current) {
       if (!getMusicIframe()) {
         syncMusicPlayer(true);
+      } else if (youtubePlayerEnded) {
+        return;
       } else if (youtubePlayerPlaying && audioInitializedInTab && !state.musicMuted) {
         postMusicCommand("unMute");
-      } else {
+      } else if (!youtubePlayerEnded) {
         scheduleMusicKeepAlive({
           unmute: audioInitializedInTab && !state.musicMuted,
           attempts: 4,
@@ -2502,6 +2743,1065 @@ function bindEvents() {
     }
   });
   window.addEventListener("resize", scheduleResize);
+}
+
+// ─── Shared Material helpers ─────────────────────────────────────────────────
+
+function formatFileSize(bytes) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1048576).toFixed(1)} MB`;
+}
+
+function fileIcon(mimeType) {
+  if (!mimeType) return "📄";
+  if (mimeType.startsWith("image/")) return "🖼";
+  if (mimeType === "application/pdf") return "📕";
+  if (mimeType.includes("word") || mimeType.includes("document")) return "📝";
+  if (mimeType.includes("spreadsheet") || mimeType.includes("excel")) return "📊";
+  if (mimeType.includes("presentation") || mimeType.includes("powerpoint")) return "📑";
+  if (mimeType.startsWith("text/")) return "📄";
+  return "📎";
+}
+
+function subjectIconMarkup(name) {
+  const key = String(name || "").toLowerCase();
+  if (key.includes("physics")) {
+    return `<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><ellipse cx="9" cy="9" rx="7" ry="2.8"/><ellipse cx="9" cy="9" rx="7" ry="2.8" transform="rotate(60 9 9)"/><ellipse cx="9" cy="9" rx="7" ry="2.8" transform="rotate(120 9 9)"/><circle cx="9" cy="9" r="1.4" fill="currentColor" stroke="none"/></svg>`;
+  }
+  if (key.includes("chem")) {
+    return `<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 2v5.5L3 14.5a1 1 0 0 0 .9 1.5h10.2a1 1 0 0 0 .9-1.5l-3.5-7V2"/><path d="M5.5 2h7"/><circle cx="8" cy="12" r=".8" fill="currentColor" stroke="none"/></svg>`;
+  }
+  if (key.includes("math")) {
+    return `<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M13 3H5l5 6-5 6h8"/></svg>`;
+  }
+  if (key.includes("note")) {
+    return `<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="2" width="12" height="14" rx="2"/><path d="M6 6h6M6 9h6M6 12h3"/></svg>`;
+  }
+  return `<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="5" cy="5" r="1.4"/><circle cx="9" cy="5" r="1.4"/><circle cx="13" cy="5" r="1.4"/><circle cx="5" cy="9" r="1.4"/><circle cx="9" cy="9" r="1.4"/><circle cx="13" cy="9" r="1.4"/><circle cx="5" cy="13" r="1.4"/><circle cx="9" cy="13" r="1.4"/><circle cx="13" cy="13" r="1.4"/></svg>`;
+}
+
+function getAllFiles() {
+  const files = [];
+  for (const subject of state.groupMaterials) {
+    const folders = subject.folders || [];
+    for (const file of subject.files || []) {
+      const folder = file.folderId ? folders.find((f) => f.id === file.folderId) : null;
+      files.push({ ...file, subjectId: subject.id, subjectName: subject.name, folderName: folder?.name || "" });
+    }
+  }
+  return files;
+}
+
+function materialFileUrl(subjectId, fileId, action = "download") {
+  if (!state.currentGroup) return "";
+  return `/api/groups/${encodeURIComponent(state.currentGroup.id)}/materials/${encodeURIComponent(subjectId)}/files/${encodeURIComponent(fileId)}/${action}`;
+}
+
+function downloadFile(subjectId, fileId) {
+  if (!state.currentGroup) return;
+  const url = materialFileUrl(subjectId, fileId, "download");
+  const a = document.createElement("a");
+  a.href = url;
+  a.setAttribute("download", "");
+  a.style.display = "none";
+  document.body.appendChild(a);
+  const headers = state.authToken ? { Authorization: `Bearer ${state.authToken}` } : {};
+  fetch(url, { headers }).then((res) => {
+    if (!res.ok) return;
+    return res.blob().then((blob) => {
+      const objUrl = URL.createObjectURL(blob);
+      a.href = objUrl;
+      a.click();
+      setTimeout(() => { URL.revokeObjectURL(objUrl); a.remove(); }, 2000);
+    });
+  }).catch(() => a.remove());
+}
+
+function closePdfPreview() {
+  if (!elements.pdfPreviewDialog) return;
+  if (elements.pdfPreviewDialog.open) elements.pdfPreviewDialog.close();
+  elements.pdfPreviewFrame.removeAttribute("src");
+  if (state.pdfPreviewObjectUrl) {
+    URL.revokeObjectURL(state.pdfPreviewObjectUrl);
+  }
+  state.pdfPreviewObjectUrl = "";
+  state.pdfPreviewDownload = null;
+}
+
+async function previewPdf(subjectId, file) {
+  const url = materialFileUrl(subjectId, file.id, "view");
+  const response = await fetch(url, { headers: authHeaders() });
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error(data.error || "Could not open PDF.");
+  }
+  closePdfPreview();
+  const blob = await response.blob();
+  state.pdfPreviewObjectUrl = URL.createObjectURL(blob);
+  state.pdfPreviewDownload = { subjectId, fileId: file.id };
+  elements.pdfPreviewTitle.textContent = file.name;
+  elements.pdfPreviewFrame.src = state.pdfPreviewObjectUrl;
+  openDialog(elements.pdfPreviewDialog);
+}
+
+function openFile(subjectId, file) {
+  if (file.mimeType === "application/pdf") {
+    previewPdf(subjectId, file).catch((err) => alert(err.message || "Could not open PDF."));
+    return;
+  }
+  downloadFile(subjectId, file.id);
+}
+
+function openSubjectDetail(subjectId) {
+  state.currentSubjectId = subjectId;
+  elements.groupBodyRooms.hidden = true;
+  elements.subjectDetailView.hidden = false;
+  renderMaterials();
+  renderThreads();
+}
+
+function closeSubjectDetail() {
+  state.currentSubjectId = null;
+  elements.subjectDetailView.hidden = true;
+  elements.groupBodyRooms.hidden = false;
+  hideMentionDropdown();
+  renderMaterials();
+}
+
+async function fetchGroupMaterials() {
+  if (!state.currentGroup) return;
+  try {
+    const data = await apiRequest(`/api/groups/${encodeURIComponent(state.currentGroup.id)}/materials`);
+    state.groupMaterials = data.materials || [];
+  } catch {
+    state.groupMaterials = [];
+  }
+  renderMaterials();
+}
+
+async function fetchGroupThreads() {
+  if (!state.currentGroup) return;
+  try {
+    const data = await apiRequest(`/api/groups/${encodeURIComponent(state.currentGroup.id)}/threads`);
+    state.groupThreads = data.threads || [];
+  } catch {
+    state.groupThreads = [];
+  }
+  renderThreads();
+}
+
+async function addSubject(name) {
+  if (!state.currentGroup) return;
+  const data = await apiRequest(`/api/groups/${encodeURIComponent(state.currentGroup.id)}/materials`, {
+    method: "POST",
+    body: JSON.stringify({ name })
+  });
+  state.groupMaterials.push(data.subject);
+  renderMaterials();
+}
+
+async function renameSubject(subjectId, name) {
+  if (!state.currentGroup) return;
+  const data = await apiRequest(`/api/groups/${encodeURIComponent(state.currentGroup.id)}/materials/${encodeURIComponent(subjectId)}`, {
+    method: "PATCH",
+    body: JSON.stringify({ name })
+  });
+  const idx = state.groupMaterials.findIndex((s) => s.id === subjectId);
+  if (idx !== -1) state.groupMaterials[idx] = data.subject;
+  renderMaterials();
+}
+
+async function deleteSubject(subjectId) {
+  if (!state.currentGroup) return;
+  await apiRequest(`/api/groups/${encodeURIComponent(state.currentGroup.id)}/materials/${encodeURIComponent(subjectId)}`, { method: "DELETE" });
+  state.groupMaterials = state.groupMaterials.filter((s) => s.id !== subjectId);
+  renderMaterials();
+  renderThreads();
+}
+
+async function addFolder(subjectId, name) {
+  if (!state.currentGroup) return;
+  const data = await apiRequest(`/api/groups/${encodeURIComponent(state.currentGroup.id)}/materials/${encodeURIComponent(subjectId)}/folders`, {
+    method: "POST",
+    body: JSON.stringify({ name })
+  });
+  const subject = state.groupMaterials.find((s) => s.id === subjectId);
+  if (subject) {
+    subject.folders = subject.folders || [];
+    subject.folders.push(data.folder);
+  }
+  renderMaterials();
+}
+
+async function renameFolder(subjectId, folderId, name) {
+  if (!state.currentGroup) return;
+  const data = await apiRequest(`/api/groups/${encodeURIComponent(state.currentGroup.id)}/materials/${encodeURIComponent(subjectId)}/folders/${encodeURIComponent(folderId)}`, {
+    method: "PATCH",
+    body: JSON.stringify({ name })
+  });
+  const subject = state.groupMaterials.find((s) => s.id === subjectId);
+  const idx = subject?.folders?.findIndex((f) => f.id === folderId) ?? -1;
+  if (idx !== -1) subject.folders[idx] = data.folder;
+  renderMaterials();
+}
+
+async function deleteFolder(subjectId, folderId) {
+  if (!state.currentGroup) return;
+  if (folderId === DEFAULT_FILES_FOLDER_ID) return;
+  await apiRequest(`/api/groups/${encodeURIComponent(state.currentGroup.id)}/materials/${encodeURIComponent(subjectId)}/folders/${encodeURIComponent(folderId)}`, { method: "DELETE" });
+  const subject = state.groupMaterials.find((s) => s.id === subjectId);
+  if (subject) {
+    subject.folders = (subject.folders || []).filter((f) => f.id !== folderId);
+    for (const file of subject.files || []) {
+      if (file.folderId === folderId) file.folderId = DEFAULT_FILES_FOLDER_ID;
+    }
+  }
+  renderMaterials();
+  renderThreads();
+}
+
+async function uploadFileToSubject(subjectId, file, folderId = null) {
+  if (!state.currentGroup) return;
+  const reader = new FileReader();
+  reader.readAsDataURL(file);
+  reader.onload = async () => {
+    const base64 = reader.result.split(",")[1];
+    try {
+      const data = await apiRequest(
+        `/api/groups/${encodeURIComponent(state.currentGroup.id)}/materials/${encodeURIComponent(subjectId)}/files`,
+        { method: "POST", body: JSON.stringify({ name: file.name, mimeType: file.type || "application/octet-stream", folderId, data: base64 }) }
+      );
+      const subject = state.groupMaterials.find((s) => s.id === subjectId);
+      if (subject) { subject.files = subject.files || []; subject.files.push(data.file); }
+      renderMaterials();
+    } catch (err) {
+      alert(err.message || "Upload failed.");
+    }
+  };
+}
+
+async function renameFile(subjectId, fileId, name) {
+  if (!state.currentGroup) return;
+  const data = await apiRequest(
+    `/api/groups/${encodeURIComponent(state.currentGroup.id)}/materials/${encodeURIComponent(subjectId)}/files/${encodeURIComponent(fileId)}`,
+    { method: "PATCH", body: JSON.stringify({ name }) }
+  );
+  const subject = state.groupMaterials.find((s) => s.id === subjectId);
+  const idx = subject?.files?.findIndex((f) => f.id === fileId) ?? -1;
+  if (idx !== -1) subject.files[idx] = data.file;
+  renderMaterials();
+  renderThreads();
+}
+
+async function moveFile(subjectId, fileId, folderId) {
+  if (!state.currentGroup) return;
+  const subject = state.groupMaterials.find((s) => s.id === subjectId);
+  const file = subject?.files?.find((f) => f.id === fileId);
+  if (!file) return;
+  const data = await apiRequest(
+    `/api/groups/${encodeURIComponent(state.currentGroup.id)}/materials/${encodeURIComponent(subjectId)}/files/${encodeURIComponent(fileId)}`,
+    { method: "PATCH", body: JSON.stringify({ name: file.name, folderId }) }
+  );
+  Object.assign(file, data.file);
+  renderMaterials();
+  renderThreads();
+}
+
+async function deleteFileFromSubject(subjectId, fileId) {
+  if (!state.currentGroup) return;
+  await apiRequest(
+    `/api/groups/${encodeURIComponent(state.currentGroup.id)}/materials/${encodeURIComponent(subjectId)}/files/${encodeURIComponent(fileId)}`,
+    { method: "DELETE" }
+  );
+  const subject = state.groupMaterials.find((s) => s.id === subjectId);
+  if (subject) subject.files = (subject.files || []).filter((f) => f.id !== fileId);
+  renderMaterials();
+}
+
+async function postThread(text, mentionedFileIds) {
+  if (!state.currentGroup) return;
+  const data = await apiRequest(`/api/groups/${encodeURIComponent(state.currentGroup.id)}/threads`, {
+    method: "POST",
+    body: JSON.stringify({ text, mentionedFileIds })
+  });
+  state.groupThreads.unshift(data.thread);
+  renderThreads();
+}
+
+async function replyToThread(threadId, text) {
+  if (!state.currentGroup) return;
+  const data = await apiRequest(`/api/groups/${encodeURIComponent(state.currentGroup.id)}/threads/${encodeURIComponent(threadId)}/replies`, {
+    method: "POST",
+    body: JSON.stringify({ text })
+  });
+  const thread = state.groupThreads.find((t) => t.id === threadId);
+  if (thread) thread.replies.push(data.reply);
+  state.openReplyThreadId = null;
+  renderThreads();
+}
+
+async function toggleResolveThread(threadId) {
+  if (!state.currentGroup) return;
+  const data = await apiRequest(`/api/groups/${encodeURIComponent(state.currentGroup.id)}/threads/${encodeURIComponent(threadId)}`, { method: "PATCH" });
+  const idx = state.groupThreads.findIndex((t) => t.id === threadId);
+  if (idx !== -1) state.groupThreads[idx] = data.thread;
+  renderThreads();
+}
+
+async function deleteThread(threadId) {
+  if (!state.currentGroup) return;
+  await apiRequest(`/api/groups/${encodeURIComponent(state.currentGroup.id)}/threads/${encodeURIComponent(threadId)}`, { method: "DELETE" });
+  state.groupThreads = state.groupThreads.filter((t) => t.id !== threadId);
+  renderThreads();
+}
+
+// Render @mention syntax: @[name](fileId) → clickable button
+function renderTextWithMentions(text) {
+  const fragment = document.createDocumentFragment();
+  const regex = /@\[([^\]]+)\]\(([^)]+)\)/g;
+  let lastIndex = 0;
+  let match;
+  while ((match = regex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      fragment.appendChild(document.createTextNode(text.slice(lastIndex, match.index)));
+    }
+    const [, name, fileId] = match;
+    const allFiles = getAllFiles();
+    const fileInfo = allFiles.find((f) => f.id === fileId);
+    const btn = document.createElement("button");
+    btn.className = "thread-mention";
+    btn.type = "button";
+    btn.textContent = `@${name}`;
+    if (fileInfo) {
+      btn.title = `Download ${name}`;
+      btn.addEventListener("click", () => downloadFile(fileInfo.subjectId, fileId));
+    } else {
+      btn.disabled = true;
+      btn.style.opacity = "0.5";
+      btn.title = "File no longer available";
+    }
+    fragment.appendChild(btn);
+    lastIndex = regex.lastIndex;
+  }
+  if (lastIndex < text.length) {
+    fragment.appendChild(document.createTextNode(text.slice(lastIndex)));
+  }
+  return fragment;
+}
+
+function formatRelativeTime(ts) {
+  const diff = Date.now() - ts;
+  if (diff < 60000) return "just now";
+  if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
+  if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
+  return new Date(ts).toLocaleDateString([], { month: "short", day: "numeric" });
+}
+
+function renderSubjectTiles() {
+  if (!elements.subjectTilesList) return;
+  elements.subjectTilesList.innerHTML = "";
+  if (state.groupMaterials.length === 0) {
+    const empty = document.createElement("li");
+    empty.className = "subjects-empty";
+    empty.textContent = "No subjects yet. Add Physics, Chemistry, Notes, or any class your group uses.";
+    elements.subjectTilesList.append(empty);
+    return;
+  }
+  for (const subject of state.groupMaterials) {
+    subject.folders = subject.folders || [];
+    subject.files = subject.files || [];
+    const tile = document.createElement("li");
+    tile.className = "subject-tile";
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "subject-tile-button";
+    button.innerHTML = `
+      <span class="subject-tile-icon">${subjectIconMarkup(subject.name)}</span>
+      <span class="subject-tile-name"></span>
+      <span class="subject-tile-meta"></span>
+    `;
+    button.querySelector(".subject-tile-name").textContent = subject.name;
+    button.querySelector(".subject-tile-meta").textContent = `${subject.files.length} file${subject.files.length !== 1 ? "s" : ""} · ${subject.folders.length} folder${subject.folders.length !== 1 ? "s" : ""}`;
+    button.addEventListener("click", () => openSubjectDetail(subject.id));
+    tile.append(button);
+    elements.subjectTilesList.append(tile);
+  }
+}
+
+function createFileRow(subject, file) {
+  const fileItem = document.createElement("li");
+  fileItem.className = "subject-file-item";
+
+  const icon = document.createElement("span");
+  icon.className = "subject-file-icon";
+  icon.textContent = fileIcon(file.mimeType);
+
+  const info = document.createElement("div");
+  info.className = "subject-file-info";
+  const nameBtn = document.createElement("button");
+  nameBtn.className = "subject-file-name";
+  nameBtn.type = "button";
+  nameBtn.textContent = file.name;
+  nameBtn.title = file.mimeType === "application/pdf" ? `Preview ${file.name}` : `Download ${file.name}`;
+  nameBtn.addEventListener("click", () => openFile(subject.id, file));
+
+  const fileMeta = document.createElement("span");
+  fileMeta.className = "subject-file-meta";
+  const uploaded = file.uploadedAt ? formatRelativeTime(file.uploadedAt) : "unknown date";
+  fileMeta.textContent = `${formatFileSize(file.size)} · uploaded by ${file.uploadedBy || "unknown"} · ${uploaded}`;
+  info.append(nameBtn, fileMeta);
+
+  const renameFileBtn = document.createElement("button");
+  renameFileBtn.type = "button";
+  renameFileBtn.className = "icon-button subject-file-action";
+  renameFileBtn.textContent = "Rename";
+  renameFileBtn.addEventListener("click", async () => {
+    const name = prompt("File name", file.name);
+    if (!name?.trim() || name.trim() === file.name) return;
+    try { await renameFile(subject.id, file.id, name.trim()); } catch (err) { alert(err.message || "Could not rename file."); }
+  });
+
+  const downloadBtn = document.createElement("button");
+  downloadBtn.type = "button";
+  downloadBtn.className = "icon-button subject-file-action";
+  downloadBtn.textContent = file.mimeType === "application/pdf" ? "Download" : "Open";
+  downloadBtn.addEventListener("click", () => downloadFile(subject.id, file.id));
+
+  const delBtn = document.createElement("button");
+  delBtn.type = "button";
+  delBtn.className = "icon-button subject-file-delete";
+  delBtn.textContent = "Delete";
+  delBtn.title = "Delete file";
+  delBtn.addEventListener("click", async () => {
+    try { await deleteFileFromSubject(subject.id, file.id); } catch (err) { alert(err.message || "Failed."); }
+  });
+
+  fileItem.append(icon, info, renameFileBtn, downloadBtn, delBtn);
+  return fileItem;
+}
+
+function renderSubjectDetail() {
+  if (!elements.subjectsList) return;
+  const subject = state.groupMaterials.find((s) => s.id === state.currentSubjectId);
+  elements.subjectsList.innerHTML = "";
+  if (!subject) {
+    elements.subjectDetailTitle.textContent = "";
+    elements.subjectDetailMeta.textContent = "";
+    return;
+  }
+  subject.folders = subject.folders || [];
+  subject.files = subject.files || [];
+  if (!subject.folders.some((folder) => folder.id === DEFAULT_FILES_FOLDER_ID)) {
+    subject.folders.unshift({
+      id: DEFAULT_FILES_FOLDER_ID,
+      name: "Files",
+      createdBy: subject.createdBy || "System",
+      createdAt: subject.createdAt || Date.now(),
+      isDefault: true
+    });
+  }
+  for (const file of subject.files) {
+    if (!file.folderId || !subject.folders.some((folder) => folder.id === file.folderId)) {
+      file.folderId = DEFAULT_FILES_FOLDER_ID;
+    }
+  }
+  elements.subjectDetailTitle.textContent = subject.name;
+  elements.subjectDetailMeta.textContent = `${subject.files.length} file${subject.files.length !== 1 ? "s" : ""} · ${subject.folders.length} folder${subject.folders.length !== 1 ? "s" : ""} · created by ${subject.createdBy || "unknown"}`;
+
+  if (subject.folders.length === 0 && subject.files.length === 0) {
+    const empty = document.createElement("li");
+    empty.className = "subject-files-empty";
+    empty.textContent = "No files uploaded yet.";
+    elements.subjectsList.append(empty);
+    return;
+  }
+
+  for (const folder of subject.folders) {
+    const folderItem = document.createElement("li");
+    folderItem.className = "subject-folder-item";
+    const folderFiles = subject.files.filter((file) => file.folderId === folder.id);
+    const folderHead = document.createElement("div");
+    folderHead.className = "subject-folder-head";
+    const folderName = document.createElement("span");
+    folderName.className = "subject-folder-name";
+    folderName.textContent = folder.name;
+    const folderMeta = document.createElement("span");
+    folderMeta.className = "subject-folder-meta";
+    folderMeta.textContent = folder.id === DEFAULT_FILES_FOLDER_ID
+      ? `${folderFiles.length} file${folderFiles.length !== 1 ? "s" : ""}`
+      : `${folderFiles.length} file${folderFiles.length !== 1 ? "s" : ""} · by ${folder.createdBy || "unknown"}`;
+    const folderActions = document.createElement("div");
+    folderActions.className = "subject-folder-actions";
+    const uploadBtn = document.createElement("button");
+    uploadBtn.type = "button";
+    uploadBtn.className = "icon-button";
+    uploadBtn.textContent = "Upload";
+    uploadBtn.addEventListener("click", () => {
+      state.pendingUploadSubjectId = subject.id;
+      state.pendingUploadFolderId = folder.id;
+      elements.fileUploadInput.value = "";
+      elements.fileUploadInput.click();
+    });
+    folderActions.append(uploadBtn);
+    if (folder.id !== DEFAULT_FILES_FOLDER_ID) {
+      const renameBtn = document.createElement("button");
+      renameBtn.type = "button";
+      renameBtn.className = "icon-button";
+      renameBtn.textContent = "Rename";
+      renameBtn.addEventListener("click", async () => {
+        const name = prompt("Folder name", folder.name);
+        if (!name?.trim() || name.trim() === folder.name) return;
+        try { await renameFolder(subject.id, folder.id, name.trim()); } catch (err) { alert(err.message || "Could not rename folder."); }
+      });
+      const removeBtn = document.createElement("button");
+      removeBtn.type = "button";
+      removeBtn.className = "icon-button";
+      removeBtn.textContent = "Remove";
+      removeBtn.addEventListener("click", async () => {
+        if (!confirm(`Remove folder "${folder.name}"? Files move back to Files.`)) return;
+        try { await deleteFolder(subject.id, folder.id); } catch (err) { alert(err.message || "Could not remove folder."); }
+      });
+      folderActions.append(renameBtn, removeBtn);
+    }
+    folderHead.append(folderName, folderMeta, folderActions);
+    folderItem.append(folderHead);
+    const nested = document.createElement("ul");
+    nested.className = "subject-folder-files";
+    if (folderFiles.length === 0) {
+      const empty = document.createElement("li");
+      empty.className = "subject-files-empty";
+      empty.textContent = "Empty folder.";
+      nested.append(empty);
+    } else {
+      for (const file of folderFiles) nested.append(createFileRow(subject, file));
+    }
+    folderItem.append(nested);
+    elements.subjectsList.append(folderItem);
+  }
+}
+
+function renderMaterials() {
+  renderSubjectTiles();
+  renderSubjectDetail();
+  return;
+  if (!elements.subjectsList) return;
+  if (elements.subjectCategoryButtons) {
+    elements.subjectCategoryButtons.innerHTML = "";
+  }
+  elements.subjectsList.innerHTML = "";
+  if (state.groupMaterials.length === 0) {
+    const empty = document.createElement("li");
+    empty.className = "subjects-empty";
+    empty.textContent = "No subjects yet — add one to get started.";
+    elements.subjectsList.append(empty);
+    return;
+  }
+  for (const subject of state.groupMaterials) {
+    subject.folders = subject.folders || [];
+    subject.files = subject.files || [];
+    if (elements.subjectCategoryButtons) {
+      const categoryBtn = document.createElement("button");
+      categoryBtn.type = "button";
+      categoryBtn.className = "category-btn";
+      categoryBtn.innerHTML = `<span class="category-icon">${subjectIconMarkup(subject.name)}</span><span></span>`;
+      categoryBtn.querySelector("span:last-child").textContent = subject.name;
+      categoryBtn.addEventListener("click", () => {
+        document.querySelector(`[data-subject-id="${subject.id}"]`)?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      });
+      elements.subjectCategoryButtons.append(categoryBtn);
+    }
+    const li = document.createElement("li");
+    li.className = "subject-card";
+    li.dataset.subjectId = subject.id;
+
+    const head = document.createElement("div");
+    head.className = "subject-card-head";
+    const titleWrap = document.createElement("div");
+    titleWrap.className = "subject-card-title";
+    const nameEl = document.createElement("span");
+    nameEl.className = "subject-card-name";
+    nameEl.textContent = subject.name;
+    const metaEl = document.createElement("span");
+    metaEl.className = "subject-card-meta";
+    metaEl.textContent = `${subject.files.length} file${subject.files.length !== 1 ? "s" : ""} · ${subject.folders.length} folder${subject.folders.length !== 1 ? "s" : ""} · by ${subject.createdBy || "unknown"}`;
+    titleWrap.append(nameEl, metaEl);
+    const actions = document.createElement("div");
+    actions.className = "subject-card-actions";
+
+    const folderBtn = document.createElement("button");
+    folderBtn.type = "button";
+    folderBtn.className = "icon-button";
+    folderBtn.textContent = "Folder";
+    folderBtn.addEventListener("click", async () => {
+      const name = prompt("Folder name");
+      if (!name?.trim()) return;
+      try { await addFolder(subject.id, name.trim()); } catch (err) { alert(err.message || "Could not create folder."); }
+    });
+
+    const uploadBtn = document.createElement("button");
+    uploadBtn.type = "button";
+    uploadBtn.className = "icon-button";
+    uploadBtn.textContent = "Upload";
+    uploadBtn.addEventListener("click", () => {
+      state.pendingUploadSubjectId = subject.id;
+      state.pendingUploadFolderId = null;
+      elements.fileUploadInput.value = "";
+      elements.fileUploadInput.click();
+    });
+
+    const renameBtn = document.createElement("button");
+    renameBtn.type = "button";
+    renameBtn.className = "icon-button";
+    renameBtn.textContent = "Rename";
+    renameBtn.addEventListener("click", async () => {
+      const name = prompt("Subject name", subject.name);
+      if (!name?.trim() || name.trim() === subject.name) return;
+      try { await renameSubject(subject.id, name.trim()); } catch (err) { alert(err.message || "Could not rename subject."); }
+    });
+
+    const deleteBtn = document.createElement("button");
+    deleteBtn.type = "button";
+    deleteBtn.className = "icon-button";
+    deleteBtn.textContent = "Delete";
+    deleteBtn.addEventListener("click", async () => {
+      if (!confirm(`Delete subject "${subject.name}" and all its files?`)) return;
+      try { await deleteSubject(subject.id); } catch (err) { alert(err.message || "Failed."); }
+    });
+
+    actions.append(folderBtn, uploadBtn, renameBtn, deleteBtn);
+    head.append(titleWrap, actions);
+    li.append(head);
+
+    const filesList = document.createElement("ul");
+    filesList.className = "subject-files-list";
+
+    const renderFile = (file) => {
+      const fileItem = document.createElement("li");
+      fileItem.className = "subject-file-item";
+
+      const icon = document.createElement("span");
+      icon.className = "subject-file-icon";
+      icon.textContent = fileIcon(file.mimeType);
+
+      const info = document.createElement("div");
+      info.className = "subject-file-info";
+      const nameBtn = document.createElement("button");
+      nameBtn.className = "subject-file-name";
+      nameBtn.type = "button";
+      nameBtn.textContent = file.name;
+      nameBtn.title = file.mimeType === "application/pdf" ? `Preview ${file.name}` : `Download ${file.name}`;
+      nameBtn.addEventListener("click", () => openFile(subject.id, file));
+
+      const fileMeta = document.createElement("span");
+      fileMeta.className = "subject-file-meta";
+      const uploaded = file.uploadedAt ? formatRelativeTime(file.uploadedAt) : "unknown date";
+      fileMeta.textContent = `${formatFileSize(file.size)} · uploaded by ${file.uploadedBy || "unknown"} · ${uploaded}`;
+      info.append(nameBtn, fileMeta);
+
+      const renameFileBtn = document.createElement("button");
+      renameFileBtn.type = "button";
+      renameFileBtn.className = "icon-button subject-file-action";
+      renameFileBtn.textContent = "Rename";
+      renameFileBtn.addEventListener("click", async () => {
+        const name = prompt("File name", file.name);
+        if (!name?.trim() || name.trim() === file.name) return;
+        try { await renameFile(subject.id, file.id, name.trim()); } catch (err) { alert(err.message || "Could not rename file."); }
+      });
+
+      const downloadBtn = document.createElement("button");
+      downloadBtn.type = "button";
+      downloadBtn.className = "icon-button subject-file-action";
+      downloadBtn.textContent = file.mimeType === "application/pdf" ? "Download" : "Open";
+      downloadBtn.addEventListener("click", () => downloadFile(subject.id, file.id));
+
+      const delBtn = document.createElement("button");
+      delBtn.type = "button";
+      delBtn.className = "icon-button subject-file-delete";
+      delBtn.textContent = "Delete";
+      delBtn.title = "Delete file";
+      delBtn.addEventListener("click", async () => {
+        try { await deleteFileFromSubject(subject.id, file.id); } catch (err) { alert(err.message || "Failed."); }
+      });
+
+      fileItem.append(icon, info, renameFileBtn, downloadBtn, delBtn);
+      return fileItem;
+    };
+
+    const rootFiles = subject.files.filter((file) => !file.folderId || !subject.folders.some((folder) => folder.id === file.folderId));
+    const hasAnyFiles = subject.files.length > 0;
+
+    if (!hasAnyFiles && subject.folders.length === 0) {
+      const empty = document.createElement("li");
+      empty.className = "subject-files-empty";
+      empty.textContent = "No files uploaded yet.";
+      filesList.append(empty);
+    } else {
+      for (const folder of subject.folders) {
+        const folderItem = document.createElement("li");
+        folderItem.className = "subject-folder-item";
+        const folderFiles = subject.files.filter((file) => file.folderId === folder.id);
+
+        const folderHead = document.createElement("div");
+        folderHead.className = "subject-folder-head";
+        const folderName = document.createElement("span");
+        folderName.className = "subject-folder-name";
+        folderName.textContent = folder.name;
+        const folderMeta = document.createElement("span");
+        folderMeta.className = "subject-folder-meta";
+        folderMeta.textContent = `${folderFiles.length} file${folderFiles.length !== 1 ? "s" : ""} · by ${folder.createdBy || "unknown"}`;
+
+        const folderActions = document.createElement("div");
+        folderActions.className = "subject-folder-actions";
+        const folderUploadBtn = document.createElement("button");
+        folderUploadBtn.type = "button";
+        folderUploadBtn.className = "icon-button";
+        folderUploadBtn.textContent = "Upload";
+        folderUploadBtn.addEventListener("click", () => {
+          state.pendingUploadSubjectId = subject.id;
+          state.pendingUploadFolderId = folder.id;
+          elements.fileUploadInput.value = "";
+          elements.fileUploadInput.click();
+        });
+        const folderRenameBtn = document.createElement("button");
+        folderRenameBtn.type = "button";
+        folderRenameBtn.className = "icon-button";
+        folderRenameBtn.textContent = "Rename";
+        folderRenameBtn.addEventListener("click", async () => {
+          const name = prompt("Folder name", folder.name);
+          if (!name?.trim() || name.trim() === folder.name) return;
+          try { await renameFolder(subject.id, folder.id, name.trim()); } catch (err) { alert(err.message || "Could not rename folder."); }
+        });
+        const folderDeleteBtn = document.createElement("button");
+        folderDeleteBtn.type = "button";
+        folderDeleteBtn.className = "icon-button";
+        folderDeleteBtn.textContent = "Remove";
+        folderDeleteBtn.addEventListener("click", async () => {
+          if (!confirm(`Remove folder "${folder.name}"? Files move back to the subject.`)) return;
+          try { await deleteFolder(subject.id, folder.id); } catch (err) { alert(err.message || "Could not remove folder."); }
+        });
+        folderActions.append(folderUploadBtn, folderRenameBtn, folderDeleteBtn);
+        folderHead.append(folderName, folderMeta, folderActions);
+        folderItem.append(folderHead);
+
+        const nestedList = document.createElement("ul");
+        nestedList.className = "subject-folder-files";
+        if (folderFiles.length === 0) {
+          const emptyFolder = document.createElement("li");
+          emptyFolder.className = "subject-files-empty";
+          emptyFolder.textContent = "Empty folder.";
+          nestedList.append(emptyFolder);
+        } else {
+          for (const file of folderFiles) nestedList.append(renderFile(file));
+        }
+        folderItem.append(nestedList);
+        filesList.append(folderItem);
+      }
+
+      if (rootFiles.length > 0) {
+        const rootLabel = document.createElement("li");
+        rootLabel.className = "subject-root-label";
+        rootLabel.textContent = "Subject files";
+        filesList.append(rootLabel);
+        for (const file of rootFiles) filesList.append(renderFile(file));
+      }
+    }
+
+    li.append(filesList);
+    elements.subjectsList.append(li);
+  }
+}
+
+function renderThreads() {
+  if (!elements.threadsList) return;
+  elements.threadsList.innerHTML = "";
+  if (state.groupThreads.length === 0) {
+    const empty = document.createElement("li");
+    empty.className = "threads-empty";
+    empty.textContent = "No discussion yet. Post a question to get started.";
+    elements.threadsList.append(empty);
+    return;
+  }
+  for (const thread of state.groupThreads) {
+    const li = document.createElement("li");
+    li.className = `thread-item${thread.resolved ? " is-resolved" : ""}`;
+    li.dataset.threadId = thread.id;
+
+    const main = document.createElement("div");
+    main.className = "thread-main";
+
+    const header = document.createElement("div");
+    header.className = "thread-header";
+    const authorEl = document.createElement("span");
+    authorEl.className = "thread-author";
+    authorEl.textContent = thread.author;
+    const timeEl = document.createElement("span");
+    timeEl.className = "thread-time";
+    timeEl.textContent = formatRelativeTime(thread.createdAt);
+    header.append(authorEl, timeEl);
+    if (thread.resolved) {
+      const badge = document.createElement("span");
+      badge.className = "thread-resolved-badge";
+      badge.textContent = "Resolved";
+      header.append(badge);
+    }
+
+    const textEl = document.createElement("div");
+    textEl.className = "thread-text";
+    textEl.appendChild(renderTextWithMentions(thread.text));
+
+    const actionsEl = document.createElement("div");
+    actionsEl.className = "thread-actions";
+
+    const replyBtn = document.createElement("button");
+    replyBtn.type = "button";
+    replyBtn.className = "icon-button";
+    replyBtn.textContent = `Reply${thread.replies.length > 0 ? ` (${thread.replies.length})` : ""}`;
+    replyBtn.addEventListener("click", () => {
+      state.openReplyThreadId = state.openReplyThreadId === thread.id ? null : thread.id;
+      renderThreads();
+    });
+
+    const resolveBtn = document.createElement("button");
+    resolveBtn.type = "button";
+    resolveBtn.className = "icon-button";
+    resolveBtn.textContent = thread.resolved ? "Unresolve" : "Resolve";
+    resolveBtn.addEventListener("click", async () => {
+      try { await toggleResolveThread(thread.id); } catch (err) { alert(err.message || "Failed."); }
+    });
+
+    const deleteBtn = document.createElement("button");
+    deleteBtn.type = "button";
+    deleteBtn.className = "icon-button";
+    deleteBtn.textContent = "Delete";
+    deleteBtn.addEventListener("click", async () => {
+      if (!confirm("Delete this thread and all its replies?")) return;
+      try { await deleteThread(thread.id); } catch (err) { alert(err.message || "Failed."); }
+    });
+
+    actionsEl.append(replyBtn, resolveBtn, deleteBtn);
+    main.append(header, textEl, actionsEl);
+    li.append(main);
+
+    if (thread.replies.length > 0 || state.openReplyThreadId === thread.id) {
+      const repliesEl = document.createElement("div");
+      repliesEl.className = "thread-replies";
+      for (const reply of thread.replies) {
+        const replyItem = document.createElement("div");
+        replyItem.className = "reply-item";
+        const rHeader = document.createElement("div");
+        rHeader.className = "reply-header";
+        const rAuthor = document.createElement("span");
+        rAuthor.className = "reply-author";
+        rAuthor.textContent = reply.author;
+        const rTime = document.createElement("span");
+        rTime.className = "reply-time";
+        rTime.textContent = formatRelativeTime(reply.createdAt);
+        rHeader.append(rAuthor, rTime);
+        const rText = document.createElement("div");
+        rText.className = "reply-text";
+        rText.appendChild(renderTextWithMentions(reply.text));
+        replyItem.append(rHeader, rText);
+        repliesEl.append(replyItem);
+      }
+      if (state.openReplyThreadId === thread.id) {
+        const replyForm = document.createElement("div");
+        replyForm.className = "reply-form";
+        const replyInput = document.createElement("input");
+        replyInput.className = "reply-input";
+        replyInput.placeholder = "Write a reply…";
+        replyInput.maxLength = 1000;
+        replyInput.autocomplete = "off";
+        const submitBtn = document.createElement("button");
+        submitBtn.type = "button";
+        submitBtn.className = "icon-button";
+        submitBtn.textContent = "Send";
+        const doReply = async () => {
+          const text = replyInput.value.trim();
+          if (!text) return;
+          try { await replyToThread(thread.id, text); } catch (err) { alert(err.message || "Failed."); }
+        };
+        submitBtn.addEventListener("click", doReply);
+        replyInput.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); doReply(); } });
+        replyForm.append(replyInput, submitBtn);
+        repliesEl.append(replyForm);
+        requestAnimationFrame(() => replyInput.focus());
+      }
+      li.append(repliesEl);
+    }
+
+    elements.threadsList.append(li);
+  }
+}
+
+// @mention dropdown logic
+function getMentionState(input) {
+  const val = input.value;
+  const cursor = input.selectionStart;
+  const before = val.slice(0, cursor);
+  const atIdx = before.lastIndexOf("@");
+  if (atIdx === -1) return null;
+  const textAfterAt = before.slice(atIdx + 1);
+  if (/\s/.test(textAfterAt)) return null;
+  return { atIdx, query: textAfterAt.toLowerCase() };
+}
+
+function updateMentionDropdown(input) {
+  const ms = getMentionState(input);
+  if (!ms) { hideMentionDropdown(); return; }
+  const { query } = ms;
+  const allFiles = getAllFiles();
+  const matches = allFiles.filter((f) => f.name.toLowerCase().includes(query) || f.subjectName.toLowerCase().includes(query));
+  if (matches.length === 0) { hideMentionDropdown(); return; }
+  state.mentionQuery = query;
+  if (state.mentionHighlight >= matches.length) state.mentionHighlight = 0;
+  elements.mentionDropdown.innerHTML = "";
+  for (let i = 0; i < matches.length; i++) {
+    const file = matches[i];
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = `mention-option${i === state.mentionHighlight ? " is-highlighted" : ""}`;
+    const nameEl = document.createElement("span");
+    nameEl.className = "mention-option-name";
+    nameEl.textContent = fileIcon(file.mimeType) + " " + file.name;
+    const subEl = document.createElement("span");
+    subEl.className = "mention-option-subject";
+    subEl.textContent = file.folderName ? `${file.subjectName} / ${file.folderName}` : file.subjectName;
+    btn.append(nameEl, subEl);
+    btn.addEventListener("mousedown", (e) => { e.preventDefault(); insertMention(input, file, ms.atIdx); });
+    elements.mentionDropdown.append(btn);
+  }
+  elements.mentionDropdown.hidden = false;
+}
+
+function hideMentionDropdown() {
+  elements.mentionDropdown.hidden = true;
+  state.mentionHighlight = 0;
+}
+
+function insertMention(input, file, atIdx) {
+  const before = input.value.slice(0, atIdx);
+  const after = input.value.slice(input.selectionStart);
+  const mention = `@[${file.name}](${file.id})`;
+  input.value = before + mention + (after.startsWith(" ") ? after : " " + after);
+  const newPos = before.length + mention.length + 1;
+  input.setSelectionRange(newPos, newPos);
+  hideMentionDropdown();
+  input.focus();
+}
+
+function parseMentionedFileIds(text) {
+  const ids = [];
+  const regex = /@\[([^\]]+)\]\(([^)]+)\)/g;
+  let match;
+  while ((match = regex.exec(text)) !== null) ids.push(match[2]);
+  return ids;
+}
+
+function setGroupTab(tab) {
+  if (!elements.groupTabRooms || !elements.groupTabMaterial || !elements.groupBodyRooms || !elements.groupBodyMaterial) {
+    return;
+  }
+  state.groupTab = tab;
+  elements.groupTabRooms.classList.toggle("is-active", tab === "rooms");
+  elements.groupTabMaterial.classList.toggle("is-active", tab === "material");
+  elements.groupTabRooms.setAttribute("aria-selected", String(tab === "rooms"));
+  elements.groupTabMaterial.setAttribute("aria-selected", String(tab === "material"));
+  elements.groupBodyRooms.hidden = tab !== "rooms";
+  elements.groupBodyMaterial.hidden = tab !== "material";
+  if (tab === "material" && state.groupMaterials.length === 0) {
+    fetchGroupMaterials();
+    fetchGroupThreads();
+  }
+}
+
+function bindMaterialEvents() {
+  elements.groupTabRooms?.addEventListener("click", () => setGroupTab("rooms"));
+  elements.groupTabMaterial?.addEventListener("click", () => setGroupTab("material"));
+
+  elements.subjectDetailBackButton.addEventListener("click", closeSubjectDetail);
+  elements.subjectRenameButton.addEventListener("click", async () => {
+    const subject = state.groupMaterials.find((s) => s.id === state.currentSubjectId);
+    if (!subject) return;
+    const name = prompt("Subject name", subject.name);
+    if (!name?.trim() || name.trim() === subject.name) return;
+    try { await renameSubject(subject.id, name.trim()); } catch (err) { alert(err.message || "Could not rename subject."); }
+  });
+  elements.subjectFolderButton.addEventListener("click", async () => {
+    const subject = state.groupMaterials.find((s) => s.id === state.currentSubjectId);
+    if (!subject) return;
+    const name = prompt("Folder name");
+    if (!name?.trim()) return;
+    try { await addFolder(subject.id, name.trim()); } catch (err) { alert(err.message || "Could not create folder."); }
+  });
+  elements.subjectUploadButton.addEventListener("click", () => {
+    if (!state.currentSubjectId) return;
+    state.pendingUploadSubjectId = state.currentSubjectId;
+    state.pendingUploadFolderId = null;
+    elements.fileUploadInput.value = "";
+    elements.fileUploadInput.click();
+  });
+
+  elements.addSubjectButton.addEventListener("click", () => {
+    elements.newSubjectForm.hidden = !elements.newSubjectForm.hidden;
+    if (!elements.newSubjectForm.hidden) elements.newSubjectInput.focus();
+  });
+
+  elements.newSubjectForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const name = elements.newSubjectInput.value.trim();
+    if (!name) return;
+    elements.newSubjectMessage.textContent = "";
+    try {
+      await addSubject(name);
+      elements.newSubjectInput.value = "";
+      elements.newSubjectForm.hidden = true;
+    } catch (err) {
+      elements.newSubjectMessage.textContent = err.message || "Could not add subject.";
+    }
+  });
+
+  elements.fileUploadInput.addEventListener("change", () => {
+    const file = elements.fileUploadInput.files[0];
+    if (!file || !state.pendingUploadSubjectId) return;
+    uploadFileToSubject(state.pendingUploadSubjectId, file, state.pendingUploadFolderId);
+    state.pendingUploadSubjectId = null;
+    state.pendingUploadFolderId = null;
+  });
+
+  elements.newThreadForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const text = elements.threadInput.value.trim();
+    if (!text) return;
+    hideMentionDropdown();
+    try {
+      await postThread(text, parseMentionedFileIds(text));
+      elements.threadInput.value = "";
+    } catch (err) {
+      alert(err.message || "Could not post.");
+    }
+  });
+
+  elements.threadInput.addEventListener("input", () => updateMentionDropdown(elements.threadInput));
+  elements.threadInput.addEventListener("keydown", (e) => {
+    if (elements.mentionDropdown.hidden) return;
+    const options = [...elements.mentionDropdown.querySelectorAll(".mention-option")];
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      state.mentionHighlight = (state.mentionHighlight + 1) % options.length;
+      options.forEach((o, i) => o.classList.toggle("is-highlighted", i === state.mentionHighlight));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      state.mentionHighlight = (state.mentionHighlight - 1 + options.length) % options.length;
+      options.forEach((o, i) => o.classList.toggle("is-highlighted", i === state.mentionHighlight));
+    } else if (e.key === "Enter" && !elements.mentionDropdown.hidden) {
+      e.preventDefault();
+      options[state.mentionHighlight]?.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    } else if (e.key === "Escape") {
+      hideMentionDropdown();
+    }
+  });
+  elements.threadInput.addEventListener("blur", () => setTimeout(hideMentionDropdown, 150));
 }
 
 let lastRenderedTime = "";
